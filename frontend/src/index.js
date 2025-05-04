@@ -5,7 +5,6 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 import axios from 'axios';
 
-// all axios → /api
 axios.defaults.baseURL = '/api';
 const token = localStorage.getItem('token');
 if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;

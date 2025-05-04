@@ -8,7 +8,7 @@ export default function CustomerShop() {
   const [categories, setCategories] = useState([]);
   const [selectedCat, setSelectedCat] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
-  const [cart, setCart]             = useState(() => JSON.parse(localStorage.getItem('cart') || '{}'));
+  const [cart, setCart]             = useState(() => JSON.parse(localStorage.getItem('cart')||'{}'));
 
   const user = JSON.parse(localStorage.getItem('user'));
   const navigate = useNavigate();
@@ -48,7 +48,7 @@ export default function CustomerShop() {
   return (
     <div className="container py-4 position-relative">
       <Cart cart={cart} menu={menu} />
-      <h2>Welcome, {user?.name || 'Guest'}</h2>
+      <h2>Welcome, {user.name}</h2>
 
       <div className="mb-3">
         <label htmlFor="categorySelect" className="form-label">Select Category:</label>
@@ -79,9 +79,10 @@ export default function CustomerShop() {
           ))}
         </div>
 
+        {/* Search bar */}
         <input
           type="text"
-          className="form-control mt-2 w-50"
+          className="form-control mt-2"
           placeholder="Search items..."
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
@@ -108,15 +109,9 @@ export default function CustomerShop() {
                       <h5 className="card-title">{item.name}</h5>
                       <p className="card-text">₹{item.price.toFixed(2)}</p>
                       <div className="mt-auto d-flex align-items-center">
-                        <button
-                          className="btn btn-sm btn-outline-secondary"
-                          onClick={() => dec(item._id)}
-                        >–</button>
+                        <button className="btn btn-sm btn-outline-secondary" onClick={() => dec(item._id)}>–</button>
                         <span className="mx-2">{cart[item._id] || 0}</span>
-                        <button
-                          className="btn btn-sm btn-outline-secondary"
-                          onClick={() => inc(item._id)}
-                        >+</button>
+                        <button className="btn btn-sm btn-outline-secondary" onClick={() => inc(item._id)}>+</button>
                       </div>
                     </div>
                   </div>

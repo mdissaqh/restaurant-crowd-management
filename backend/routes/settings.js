@@ -1,17 +1,8 @@
 const express = require('express');
-const router  = express.Router();
-const Settings = require('../models/Settings');
+const { getSettings, update } = require('../controllers/settingsController');
+const router = express.Router();
 
-let cached;
-router.get('/', async (req,res) => {
-  if (!cached) {
-    cached = await Settings.findOne() || await new Settings().save();
-  }
-  res.json(cached);
-});
-router.post('/', async (req,res) => {
-  cached = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true });
-  res.json(cached);
-});
+router.get('/', getSettings);
+router.post('/', update);
 
 module.exports = router;

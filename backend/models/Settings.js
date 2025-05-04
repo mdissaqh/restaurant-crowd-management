@@ -1,9 +1,7 @@
 const mongoose = require('mongoose');
-
-const settingsSchema = new mongoose.Schema({
+const schema = new mongoose.Schema({
   restaurantName: { type: String, default: 'My Restaurant' },
-  logoUrl:        { type: String, default: '' },
-  coupons:        [{ code: String, discount: Number }],
+  logoUrl: { type: String, default: '' },
   tax: {
     cgst: { type: Number, default: 0 },
     sgst: { type: Number, default: 0 }
@@ -16,5 +14,4 @@ const settingsSchema = new mongoose.Schema({
     delivery:  { type: Boolean, default: true }
   }
 });
-
-module.exports = mongoose.model('Settings', settingsSchema);
+module.exports = mongoose.model('Settings', schema);

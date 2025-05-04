@@ -1,9 +1,14 @@
-const mongoose = require('mongoose');
-
-const userSchema = new mongoose.Schema({
-  name:    { type: String, required: true },
-  mobile:  { type: String, required: true, unique: true },
-  created: { type: Date,   default: Date.now }
-});
-
-module.exports = mongoose.model('User', userSchema);
+module.exports = {
+  async up(db) {
+    await db.createCollection('servicenotices');
+    await db.collection('settings').updateMany({}, {
+      $set: { 'tax.cgst': 0, 'tax.sgst': 0 }
+    });
+  },
+  async down(db) {
+    await db.collection('servicenotices').drop();
+    await db.collection('settings').updateMany({}, {
+      $unset: { 'tax.cgst': '', 'tax.sgst': '' }
+    });
+  }
+};
