@@ -1,0 +1,36 @@
+:root {
+  --primary-color: #2563eb;
+  --secondary-color: #3b82f6;
+  --background-color: #f8fafc;
+}
+
+body {
+  background-color: var(--background-color);
+  color: #1e293b;
+}
+
+.navbar {
+  background: white !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+  background-color: var(--secondary-color);
+  border-color: var(--secondary-color);
+}
+
+.card {
+  transition: transform 0.2s;
+  border: none;
+  background: white;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
