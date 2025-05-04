@@ -1,23 +1,23 @@
 const express = require('express');
-const router  = express.Router();
+const jwt     = require('jsonwebtoken');
 const User    = require('../models/User');
+const router  = express.Router();
 
-// Sign-up (new user)
-router.post('/signup', async (req,res) => {
-  const { name, mobile } = req.body;
-  let user = await User.findOne({ mobile });
-  if (user) return res.status(400).json({ error: 'Mobile already registered' });
-  user = new User({ name, mobile });
-  await user.save();
-  res.json(user);
-});
-
-// Login (existing)
-router.post('/login', async (req,res) => {
-  const { mobile } = req.body;
-  const user = await User.findOne({ mobile });
-  if (!user) return res.status(404).json({ error: 'Not found' });
-  res.json(user);
+// Mobile-only login or signup
+router.post('/loginOrSignup', async (req, res) => {
+  try {
+    const { mobile, name } = req.body;
+    let user = await User.findOne({ mobile });
+    if (!user) {
+      if (!name) return res.status(400).json({ error: 'New users must provide name' });
+      user = await User.create({ mobile, name });
+    }
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET);
+    res.json({ user, token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Auth failed' });
+  }
 });
 
 module.exports = router;
