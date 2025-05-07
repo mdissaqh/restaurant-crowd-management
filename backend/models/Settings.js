@@ -2,11 +2,12 @@
 const mongoose = require('mongoose');
 
 const settingsSchema = new mongoose.Schema({
-  dineInEnabled: { type: Boolean, default: true },
-  takeawayEnabled: { type: Boolean, default: true },
-  deliveryEnabled: { type: Boolean, default: true },
+  dineInEnabled:  { type: Boolean, default: true },
+  takeawayEnabled:{ type: Boolean, default: true },
+  deliveryEnabled:{ type: Boolean, default: true },
   cafeClosed:     { type: Boolean, default: false },
-  note:           { type: String, default: '' },
+  showNotes:      { type: Boolean, default: false },  // ← NEW
+  note:           { type: String,  default: '' }
 }, {
   timestamps: true
 });

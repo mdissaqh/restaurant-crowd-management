@@ -53,10 +53,10 @@ export default function AdminDashboard() {
   function calcStats(list) {
     const now = new Date();
     const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekAgo = new Date(now.getTime() - 7*24*60*60*1000);
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     setStats({
-      today: list.filter(o => new Date(o.createdAt) >= startToday).reduce((s,o) => s + o.total, 0),
-      week:  list.filter(o => new Date(o.createdAt) >= weekAgo).reduce((s,o) => s + o.total, 0)
+      today: list.filter(o => new Date(o.createdAt) >= startToday).reduce((s, o) => s + o.total, 0),
+      week:  list.filter(o => new Date(o.createdAt) >= weekAgo).reduce((s, o) => s + o.total, 0)
     });
   }
 
@@ -68,7 +68,7 @@ export default function AdminDashboard() {
       orders.filter(o => {
         const t = new Date(o.createdAt);
         return t >= s && t <= e;
-      }).reduce((s,o) => s + o.total, 0)
+      }).reduce((s, o) => s + o.total, 0)
     );
   }
 
@@ -170,15 +170,15 @@ export default function AdminDashboard() {
       <section className="mb-5">
         <h4>Current Orders</h4>
         {orders.filter(o => !['Completed','Delivered','Cancelled'].includes(o.status)).map(o => (
-          <div key={o._id} className="card mb-2 p-2">
+          <div key={o._id} className="card mb-2 p-3">
             <div><strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})</div>
             <div><strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
             {o.serviceType==='Delivery' && <div><strong>Address:</strong> {o.address}</div>}
-            <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price*i.qty}</li>)}</ul>
+            <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price * i.qty}</li>)}</ul>
             <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
             <div><strong>Status:</strong> {o.status}{o.estimatedTime && <> — ET: {o.estimatedTime} min</>}</div>
-            <button className="btn btn-sm btn-info me-2" onClick={()=>updateStatus(o)}>Next</button>
-            <button className="btn btn-sm btn-danger" onClick={()=>cancelOrder(o)}>Cancel</button>
+            <button className="btn btn-sm btn-info me-2" onClick={() => updateStatus(o)}>Next Status</button>
+            <button className="btn btn-sm btn-danger" onClick={() => cancelOrder(o)}>Cancel Order</button>
           </div>
         ))}
       </section>
@@ -186,41 +186,57 @@ export default function AdminDashboard() {
       {/* Settings Panel */}
       <section className="mb-5">
         <h4>Site Settings</h4>
+
+        {['dineIn','takeaway','delivery'].map(type => (
+          <div className="form-check" key={type}>
+            <input
+              id={`${type}Toggle`}
+              type="checkbox"
+              className="form-check-input"
+              checked={settings[`${type}Enabled`]}
+              onChange={e => updateSetting(`${type}Enabled`, e.target.checked)}
+            />
+            <label htmlFor={`${type}Toggle`} className="form-check-label">
+              Enable {type.charAt(0).toUpperCase() + type.slice(1)}
+            </label>
+          </div>
+        ))}
+
         <div className="form-check">
-          <input type="checkbox" className="form-check-input" id="dineInToggle"
-                 checked={settings.dineInEnabled}
-                 onChange={e=>updateSetting('dineInEnabled', e.target.checked)} />
-          <label htmlFor="dineInToggle" className="form-check-label">Enable Dine-in</label>
+          <input
+            id="cafeClosedToggle"
+            type="checkbox"
+            className="form-check-input"
+            checked={settings.cafeClosed}
+            onChange={e => updateSetting('cafeClosed', e.target.checked)}
+          />
+          <label htmlFor="cafeClosedToggle" className="form-check-label">
+            Cafe Closed
+          </label>
         </div>
-        <div className="form-check">
-          <input type="checkbox" className="form-check-input" id="takeawayToggle"
-                 checked={settings.takeawayEnabled}
-                 onChange={e=>updateSetting('takeawayEnabled', e.target.checked)} />
-          <label htmlFor="takeawayToggle" className="form-check-label">Enable Takeaway</label>
-        </div>
-        <div className="form-check">
-          <input type="checkbox" className="form-check-input" id="deliveryToggle"
-                 checked={settings.deliveryEnabled}
-                 onChange={e=>updateSetting('deliveryEnabled', e.target.checked)} />
-          <label htmlFor="deliveryToggle" className="form-check-label">Enable Delivery</label>
-        </div>
-        <div className="form-check">
-          <input type="checkbox" className="form-check-input" id="cafeClosedToggle"
-                 checked={settings.cafeClosed}
-                 onChange={e=>updateSetting('cafeClosed', e.target.checked)} />
-          <label htmlFor="cafeClosedToggle" className="form-check-label">Cafe Closed</label>
-        </div>
+
         <div className="form-check mt-2">
-          <input type="checkbox" className="form-check-input" id="showNotesToggle"
-                 checked={settings.showNotes}
-                 onChange={e=>updateSetting('showNotes', e.target.checked)} />
-          <label htmlFor="showNotesToggle" className="form-check-label">Enable service‐notes display</label>
+          <input
+            id="showNotesToggle"
+            type="checkbox"
+            className="form-check-input"
+            checked={settings.showNotes}
+            onChange={e => updateSetting('showNotes', e.target.checked)}
+          />
+          <label htmlFor="showNotesToggle" className="form-check-label">
+            Enable customer notes display
+          </label>
         </div>
+
         <div className="mt-2">
           <label htmlFor="settingsNote" className="form-label">Global Note</label>
-          <textarea id="settingsNote" className="form-control" rows={2}
-                    value={settings.note}
-                    onChange={e=>updateSetting('note', e.target.value)} />
+          <textarea
+            id="settingsNote"
+            className="form-control"
+            rows={2}
+            value={settings.note}
+            onChange={e => updateSetting('note', e.target.value)}
+          />
         </div>
       </section>
 
@@ -233,10 +249,9 @@ export default function AdminDashboard() {
               <div><strong>Order ID:</strong> {o._id} — {o.name}</div>
               <div><strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
               <div><strong>Completed:</strong> {o.completedAt ? `${formatDate(o.completedAt)} ${new Date(o.completedAt).toLocaleTimeString()}` : '—'}</div>
-              <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price*i.qty}</li>)}</ul>
+              <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price * i.qty}</li>)}</ul>
               <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
               <div><strong>Status:</strong> {o.status}</div>
-              {/* Always show cancellation reason */}
               {o.status === 'Cancelled' && o.cancellationNote && (
                 <div className="mt-2 alert alert-danger">
                   <strong>Cancellation Reason:</strong> {o.cancellationNote}
@@ -247,5 +262,5 @@ export default function AdminDashboard() {
         </ul>
       </section>
     </div>
-  );
+);
 }
