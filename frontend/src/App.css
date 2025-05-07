@@ -36,3 +36,17 @@
     transform: rotate(360deg);
   }
 }
+
+/* ── NEW: star‑rating button styles ─────────────────────────────────────────── */
+
+.btn-star {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 .2rem;
+}
+.star-lit {
+  color: gold;
+}
+

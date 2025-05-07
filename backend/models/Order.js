@@ -44,11 +44,23 @@ const orderSchema = new mongoose.Schema({
     type: String, 
     default: 'Pending' 
   },
-  cancellationNote: {            // ← Added field
+  cancellationNote: {
     type: String,
     default: ''
   },
-  completedAt: Date
+  completedAt: Date,
+
+  // ← NEW feedback fields
+  rating: {
+    type: Number,
+    min: 1,
+    max: 5,
+    default: null
+  },
+  feedback: {
+    type: String,
+    default: ''
+  }
 }, {
   timestamps: true
 });
