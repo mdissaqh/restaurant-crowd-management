@@ -8,7 +8,9 @@ import { formatDate } from '../utils/formatDate';
 export default function AdminDashboard() {
   const [menu, setMenu]             = useState([]);
   const [orders, setOrders]         = useState([]);
-  const [stats, setStats]           = useState({ today: 0, week: 0 });
+  const [earningStats, setEarningStats] = useState({
+    today: 0, week: 0, month: 0, year: 0
+  });
   const [rangeStart, setRangeStart] = useState('');
   const [rangeEnd, setRangeEnd]     = useState('');
   const [rangeTotal, setRangeTotal] = useState(0);
@@ -20,6 +22,9 @@ export default function AdminDashboard() {
     cafeClosed: false,
     showNotes: false,
     note: ''
+  });
+  const [feedbackStats, setFeedbackStats] = useState({
+    overall: 0, week: 0, month: 0, year: 0, count: 0
   });
 
   const todayStr = new Date().toISOString().slice(0,10);
@@ -46,30 +51,101 @@ export default function AdminDashboard() {
   function fetchOrders() {
     axios.get('http://localhost:3001/api/orders').then(r => {
       setOrders(r.data);
-      calcStats(r.data);
+      calcEarningsStats(r.data);
+      calcRange(r.data);
+      calcFeedbackStats(r.data);
     });
   }
 
-  function calcStats(list) {
+  function calcEarningsStats(list) {
+    const completed = list.filter(o => ['Completed','Delivered'].includes(o.status));
     const now = new Date();
+
+    // Today
     const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    setStats({
-      today: list.filter(o => new Date(o.createdAt) >= startToday).reduce((s, o) => s + o.total, 0),
-      week:  list.filter(o => new Date(o.createdAt) >= weekAgo).reduce((s, o) => s + o.total, 0)
-    });
+    const todaySum = completed
+      .filter(o => new Date(o.completedAt) >= startToday)
+      .reduce((s,o) => s + o.total, 0);
+
+    // This Week (Sunday → Saturday)
+    const day = now.getDay(); // 0=Sun
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
+    const weekEnd = new Date(weekStart.getTime() + 6*24*60*60*1000);
+    const weekSum = completed
+      .filter(o => {
+        const d = new Date(o.completedAt);
+        return d >= weekStart && d <= weekEnd;
+      })
+      .reduce((s,o) => s + o.total, 0);
+
+    // This Month (1st → last day)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd   = new Date(now.getFullYear(), now.getMonth()+1, 0, 23,59,59);
+    const monthSum = completed
+      .filter(o => {
+        const d = new Date(o.completedAt);
+        return d >= monthStart && d <= monthEnd;
+      })
+      .reduce((s,o) => s + o.total, 0);
+
+    // This Year (Jan 1 → Dec 31)
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const yearEnd   = new Date(now.getFullYear(), 11, 31, 23,59,59);
+    const yearSum = completed
+      .filter(o => {
+        const d = new Date(o.completedAt);
+        return d >= yearStart && d <= yearEnd;
+      })
+      .reduce((s,o) => s + o.total, 0);
+
+    setEarningStats({ today: todaySum, week: weekSum, month: monthSum, year: yearSum });
   }
 
-  function calcRange() {
+  function calcRange(list) {
     if (!rangeStart || !rangeEnd) return;
     const s = new Date(rangeStart); s.setHours(0,0,0,0);
     const e = new Date(rangeEnd);   e.setHours(23,59,59,999);
-    setRangeTotal(
-      orders.filter(o => {
-        const t = new Date(o.createdAt);
-        return t >= s && t <= e;
-      }).reduce((s, o) => s + o.total, 0)
-    );
+    const sum = list
+      .filter(o => ['Completed','Delivered'].includes(o.status))
+      .filter(o => {
+        const d = new Date(o.completedAt);
+        return d >= s && d <= e;
+      })
+      .reduce((s,o) => s + o.total, 0);
+    setRangeTotal(sum);
+  }
+
+  function calcFeedbackStats(list) {
+    const now = new Date();
+    const day = now.getDay();
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
+    const weekEnd   = new Date(weekStart.getTime() + 6*24*60*60*1000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd   = new Date(now.getFullYear(), now.getMonth()+1, 0, 23,59,59);
+    const yearStart  = new Date(now.getFullYear(), 0, 1);
+    const yearEnd    = new Date(now.getFullYear(), 11, 31, 23,59,59);
+
+    const rated = list.filter(o => o.rating != null);
+    const avg   = arr => arr.length
+      ? arr.reduce((sum,o)=>sum+o.rating,0)/arr.length
+      : 0;
+
+    setFeedbackStats({
+      overall: avg(rated),
+      week:    avg(rated.filter(o => {
+                 const d = new Date(o.completedAt);
+                 return d>=weekStart && d<=weekEnd;
+               })),
+      month:   avg(rated.filter(o => {
+                 const d = new Date(o.completedAt);
+                 return d>=monthStart && d<=monthEnd;
+               })),
+      year:    avg(rated.filter(o => {
+                 const d = new Date(o.completedAt);
+                 return d>=yearStart && d<=yearEnd;
+               })),
+      count: rated.length
+    });
   }
 
   function addMenu(e) {
@@ -125,15 +201,34 @@ export default function AdminDashboard() {
       {/* Earnings */}
       <section className="mb-4">
         <h4>Earnings</h4>
-        <p><strong>Today:</strong> ₹{stats.today.toFixed(2)}</p>
-        <p><strong>This Week:</strong> ₹{stats.week.toFixed(2)}</p>
+        <p><strong>Today:</strong> ₹{earningStats.today.toFixed(2)}</p>
+        <p><strong>This Week:</strong> ₹{earningStats.week.toFixed(2)}</p>
+        <p><strong>This Month:</strong> ₹{earningStats.month.toFixed(2)}</p>
+        <p><strong>This Year:</strong> ₹{earningStats.year.toFixed(2)}</p>
         <div className="d-flex mb-2">
-          <input type="date" className="form-control me-2" value={rangeStart} max={todayStr} onChange={e => setRangeStart(e.target.value)} />
-          <input type="date" className="form-control me-2" value={rangeEnd}   max={todayStr} onChange={e => setRangeEnd(e.target.value)} />
-          <button className="btn btn-secondary" onClick={calcRange}>Compute Range</button>
+          <input
+            type="date"
+            className="form-control me-2"
+            value={rangeStart}
+            max={todayStr}
+            onChange={e => setRangeStart(e.target.value)}
+          />
+          <input
+            type="date"
+            className="form-control me-2"
+            value={rangeEnd}
+            max={todayStr}
+            onChange={e => setRangeEnd(e.target.value)}
+          />
+          <button className="btn btn-secondary" onClick={() => calcRange(orders)}>
+            Compute Range
+          </button>
         </div>
         {rangeStart && rangeEnd && (
-          <p><strong>Total from {rangeStart} to {rangeEnd}:</strong> ₹{rangeTotal.toFixed(2)}</p>
+          <p>
+            <strong>Total from {rangeStart} to {rangeEnd}:</strong>{' '}
+            ₹{rangeTotal.toFixed(2)}
+          </p>
         )}
       </section>
 
@@ -158,7 +253,9 @@ export default function AdminDashboard() {
               {menu.filter(i => i.category === cat).map(i => (
                 <li key={i._id} className="list-group-item d-flex justify-content-between align-items-center">
                   <span>{i.name} — ₹{i.price.toFixed(2)}</span>
-                  <button className="btn btn-sm btn-danger" onClick={() => delMenu(i._id)}>Delete</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => delMenu(i._id)}>
+                    Delete
+                  </button>
                 </li>
               ))}
             </ul>
@@ -171,7 +268,7 @@ export default function AdminDashboard() {
         <h4>Current Orders</h4>
         {orders.filter(o => !['Completed','Delivered','Cancelled'].includes(o.status)).map(o => (
           <div key={o._id} className="card mb-2 p-3">
-            <div><strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})</div>
+            <div><strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})</div>
             <div><strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
             {o.serviceType==='Delivery' && <div><strong>Address:</strong> {o.address}</div>}
             <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price * i.qty}</li>)}</ul>
@@ -183,10 +280,9 @@ export default function AdminDashboard() {
         ))}
       </section>
 
-      {/* Settings Panel */}
+      {/* Site Settings */}
       <section className="mb-5">
         <h4>Site Settings</h4>
-
         {['dineIn','takeaway','delivery'].map(type => (
           <div className="form-check" key={type}>
             <input
@@ -201,7 +297,6 @@ export default function AdminDashboard() {
             </label>
           </div>
         ))}
-
         <div className="form-check">
           <input
             id="cafeClosedToggle"
@@ -214,7 +309,6 @@ export default function AdminDashboard() {
             Cafe Closed
           </label>
         </div>
-
         <div className="form-check mt-2">
           <input
             id="showNotesToggle"
@@ -227,7 +321,6 @@ export default function AdminDashboard() {
             Enable customer notes display
           </label>
         </div>
-
         <div className="mt-2">
           <label htmlFor="settingsNote" className="form-label">Global Note</label>
           <textarea
@@ -240,16 +333,67 @@ export default function AdminDashboard() {
         </div>
       </section>
 
+      {/* Feedback & Ratings */}
+      <section className="mb-5">
+        <h4>Feedback & Ratings</h4>
+        <p>
+          <strong>Overall:</strong> {feedbackStats.overall.toFixed(2)} ★ &nbsp;
+          <strong>Last 7 days:</strong> {feedbackStats.week.toFixed(2)} ★ &nbsp;
+          <strong>This month:</strong> {feedbackStats.month.toFixed(2)} ★ &nbsp;
+          <strong>This year:</strong> {feedbackStats.year.toFixed(2)} ★ &nbsp;
+          <span className="text-muted">({feedbackStats.count} ratings)</span>
+        </p>
+        <ul className="list-group">
+          {orders
+            .filter(o => o.rating != null)
+            .sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt))
+            .map(o => (
+              <li key={o._id} className="list-group-item">
+                <div>
+                  <strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})
+                </div>
+                <div>
+                  <strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}
+                </div>
+                <ul className="mb-1">
+                  {o.items.map(i => (
+                    <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price * i.qty).toFixed(2)}</li>
+                  ))}
+                </ul>
+                <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
+                <div><strong>Status:</strong> {o.status}</div>
+                <div className="mt-1">
+                  {'★'.repeat(o.rating)}{'☆'.repeat(5-o.rating)}
+                  {o.feedback && <p className="mt-1">“{o.feedback}”</p>}
+                </div>
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+
       {/* Completed & Cancelled Orders */}
       <section>
         <h4>Completed & Cancelled Orders</h4>
         <ul className="list-group">
           {orders.filter(o => ['Completed','Delivered','Cancelled'].includes(o.status)).map(o => (
             <li key={o._id} className="list-group-item">
-              <div><strong>Order ID:</strong> {o._id} — {o.name}</div>
-              <div><strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
-              <div><strong>Completed:</strong> {o.completedAt ? `${formatDate(o.completedAt)} ${new Date(o.completedAt).toLocaleTimeString()}` : '—'}</div>
-              <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price * i.qty}</li>)}</ul>
+              <div>
+                <strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})
+              </div>
+              <div>
+                <strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}
+              </div>
+              <div>
+                <strong>Completed:</strong> {o.completedAt
+                  ? `${formatDate(o.completedAt)} ${new Date(o.completedAt).toLocaleTimeString()}`
+                  : '—'}
+              </div>
+              <ul className="mb-1">
+                {o.items.map(i => (
+                  <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price * i.qty).toFixed(2)}</li>
+                ))}
+              </ul>
               <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
               <div><strong>Status:</strong> {o.status}</div>
               {o.status === 'Cancelled' && o.cancellationNote && (
@@ -262,5 +406,5 @@ export default function AdminDashboard() {
         </ul>
       </section>
     </div>
-);
+  );
 }

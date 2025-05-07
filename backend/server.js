@@ -61,8 +61,6 @@ app.delete('/api/menu/:id', async (req,res) => {
 // --- ORDER ---
 app.post('/api/order', async (req,res) => {
   const { name,mobile,email,serviceType,address,items,lat,lng,formattedAddress } = req.body;
-
-  // enforce settings
   if (appSettings.cafeClosed)     return res.status(403).json({ error: appSettings.note });
   if (!appSettings.dineInEnabled && serviceType==='Dine-in')   return res.status(403).json({ error: appSettings.note });
   if (!appSettings.takeawayEnabled && serviceType==='Takeaway') return res.status(403).json({ error: appSettings.note });
@@ -105,6 +103,22 @@ app.post('/api/order/update', async (req,res) => {
       o.completedAt = new Date();
     }
   }
+  await o.save();
+  io.emit('orderUpdated', o);
+  res.json(o);
+});
+
+// --- NEW: feedback endpoint ---
+app.post('/api/order/feedback', async (req, res) => {
+  const { id, rating, feedback } = req.body;
+  if (!id || rating == null) return res.status(400).json({ error: 'Missing id or rating' });
+  const o = await Order.findById(id);
+  if (!o) return res.status(404).json({ error: 'Order not found' });
+  if (!['Completed','Delivered'].includes(o.status)) {
+    return res.status(403).json({ error: 'Cannot rate an incomplete order' });
+  }
+  o.rating = +rating;
+  o.feedback = feedback?.trim() || '';
   await o.save();
   io.emit('orderUpdated', o);
   res.json(o);
