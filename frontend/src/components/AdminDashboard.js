@@ -1,3 +1,5 @@
+// frontend/src/components/AdminDashboard.js
+
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import io from 'socket.io-client';
@@ -11,15 +13,26 @@ export default function AdminDashboard() {
   const [rangeEnd, setRangeEnd]     = useState('');
   const [rangeTotal, setRangeTotal] = useState(0);
   const [categories, setCategories] = useState([]);
+  const [settings, setSettings]     = useState({
+    dineInEnabled: true,
+    takeawayEnabled: true,
+    deliveryEnabled: true,
+    cafeClosed: false,
+    showNotes: false,
+    note: ''
+  });
 
   const todayStr = new Date().toISOString().slice(0,10);
 
   useEffect(() => {
     fetchMenu();
     fetchOrders();
+    axios.get('http://localhost:3001/api/settings').then(r => setSettings(r.data));
+
     const sock = io('http://localhost:3001');
     sock.on('newOrder', fetchOrders);
     sock.on('orderUpdated', fetchOrders);
+    sock.on('settingsUpdated', s => setSettings(s));
     return () => sock.disconnect();
   }, []);
 
@@ -42,10 +55,8 @@ export default function AdminDashboard() {
     const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(now.getTime() - 7*24*60*60*1000);
     setStats({
-      today: list.filter(o => new Date(o.createdAt) >= startToday)
-                  .reduce((s,o) => s + o.total, 0),
-      week:  list.filter(o => new Date(o.createdAt) >= weekAgo)
-                  .reduce((s,o) => s + o.total, 0)
+      today: list.filter(o => new Date(o.createdAt) >= startToday).reduce((s,o) => s + o.total, 0),
+      week:  list.filter(o => new Date(o.createdAt) >= weekAgo).reduce((s,o) => s + o.total, 0)
     });
   }
 
@@ -54,12 +65,10 @@ export default function AdminDashboard() {
     const s = new Date(rangeStart); s.setHours(0,0,0,0);
     const e = new Date(rangeEnd);   e.setHours(23,59,59,999);
     setRangeTotal(
-      orders
-        .filter(o => {
-          const t = new Date(o.createdAt);
-          return t >= s && t <= e;
-        })
-        .reduce((s,o) => s + o.total, 0)
+      orders.filter(o => {
+        const t = new Date(o.createdAt);
+        return t >= s && t <= e;
+      }).reduce((s,o) => s + o.total, 0)
     );
   }
 
@@ -75,9 +84,7 @@ export default function AdminDashboard() {
   }
 
   function delMenu(id) {
-    axios
-      .delete(`http://localhost:3001/api/menu/${id}`)
-      .then(fetchMenu);
+    axios.delete(`http://localhost:3001/api/menu/${id}`).then(fetchMenu);
   }
 
   function updateStatus(o) {
@@ -96,11 +103,19 @@ export default function AdminDashboard() {
     axios.post('http://localhost:3001/api/order/update', payload).then(fetchOrders);
   }
 
-  function cancelOrder(id) {
+  function cancelOrder(o) {
+    const note = prompt('Enter cancellation reason:');
+    if (note == null) return;
     axios.post('http://localhost:3001/api/order/update', {
-      id,
-      status: 'Cancelled'
+      id: o._id,
+      status: 'Cancelled',
+      cancellationNote: note
     }).then(fetchOrders);
+  }
+
+  function updateSetting(key, value) {
+    axios.post('http://localhost:3001/api/settings', { [key]: value })
+      .then(r => setSettings(r.data));
   }
 
   return (
@@ -114,7 +129,7 @@ export default function AdminDashboard() {
         <p><strong>This Week:</strong> ₹{stats.week.toFixed(2)}</p>
         <div className="d-flex mb-2">
           <input type="date" className="form-control me-2" value={rangeStart} max={todayStr} onChange={e => setRangeStart(e.target.value)} />
-          <input type="date" className="form-control me-2" value={rangeEnd} max={todayStr} onChange={e => setRangeEnd(e.target.value)} />
+          <input type="date" className="form-control me-2" value={rangeEnd}   max={todayStr} onChange={e => setRangeEnd(e.target.value)} />
           <button className="btn btn-secondary" onClick={calcRange}>Compute Range</button>
         </div>
         {rangeStart && rangeEnd && (
@@ -136,7 +151,6 @@ export default function AdminDashboard() {
           <input name="image" type="file" required className="form-control me-2" />
           <button className="btn btn-sm btn-primary">Add Item</button>
         </form>
-
         {categories.map(cat => (
           <div key={cat} className="mb-3">
             <h5>{cat}</h5>
@@ -155,41 +169,83 @@ export default function AdminDashboard() {
       {/* Current Orders */}
       <section className="mb-5">
         <h4>Current Orders</h4>
-        <ul className="list-group">
-          {orders.filter(o => !['Completed', 'Delivered', 'Cancelled'].includes(o.status)).map(o => (
-            <li key={o._id} className="list-group-item">
-              <div><strong>Order ID:</strong> {o._id} — <strong>{o.name}</strong> ({o.mobile})</div>
-              <div><strong>Placed at:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
-              {o.serviceType === 'Delivery' && <div><strong>Address:</strong> {o.address}</div>}
-              <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price * i.qty}</li>)}</ul>
-              <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
-              <div>
-                <strong>Status:</strong> {o.status}
-                {o.estimatedTime && <> — <strong>Estimated time:</strong> {o.estimatedTime} minutes</>}
-              </div>
-              <button className="btn btn-sm btn-info mt-2 me-2" onClick={() => updateStatus(o)}>Next Status</button>
-              <button className="btn btn-sm btn-danger mt-2" onClick={() => cancelOrder(o._id)}>Cancel Order</button>
-            </li>
-          ))}
-        </ul>
+        {orders.filter(o => !['Completed','Delivered','Cancelled'].includes(o.status)).map(o => (
+          <div key={o._id} className="card mb-2 p-2">
+            <div><strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})</div>
+            <div><strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
+            {o.serviceType==='Delivery' && <div><strong>Address:</strong> {o.address}</div>}
+            <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price*i.qty}</li>)}</ul>
+            <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
+            <div><strong>Status:</strong> {o.status}{o.estimatedTime && <> — ET: {o.estimatedTime} min</>}</div>
+            <button className="btn btn-sm btn-info me-2" onClick={()=>updateStatus(o)}>Next</button>
+            <button className="btn btn-sm btn-danger" onClick={()=>cancelOrder(o)}>Cancel</button>
+          </div>
+        ))}
       </section>
 
-      {/* Completed Orders */}
+      {/* Settings Panel */}
+      <section className="mb-5">
+        <h4>Site Settings</h4>
+        <div className="form-check">
+          <input type="checkbox" className="form-check-input" id="dineInToggle"
+                 checked={settings.dineInEnabled}
+                 onChange={e=>updateSetting('dineInEnabled', e.target.checked)} />
+          <label htmlFor="dineInToggle" className="form-check-label">Enable Dine-in</label>
+        </div>
+        <div className="form-check">
+          <input type="checkbox" className="form-check-input" id="takeawayToggle"
+                 checked={settings.takeawayEnabled}
+                 onChange={e=>updateSetting('takeawayEnabled', e.target.checked)} />
+          <label htmlFor="takeawayToggle" className="form-check-label">Enable Takeaway</label>
+        </div>
+        <div className="form-check">
+          <input type="checkbox" className="form-check-input" id="deliveryToggle"
+                 checked={settings.deliveryEnabled}
+                 onChange={e=>updateSetting('deliveryEnabled', e.target.checked)} />
+          <label htmlFor="deliveryToggle" className="form-check-label">Enable Delivery</label>
+        </div>
+        <div className="form-check">
+          <input type="checkbox" className="form-check-input" id="cafeClosedToggle"
+                 checked={settings.cafeClosed}
+                 onChange={e=>updateSetting('cafeClosed', e.target.checked)} />
+          <label htmlFor="cafeClosedToggle" className="form-check-label">Cafe Closed</label>
+        </div>
+        <div className="form-check mt-2">
+          <input type="checkbox" className="form-check-input" id="showNotesToggle"
+                 checked={settings.showNotes}
+                 onChange={e=>updateSetting('showNotes', e.target.checked)} />
+          <label htmlFor="showNotesToggle" className="form-check-label">Enable service‐notes display</label>
+        </div>
+        <div className="mt-2">
+          <label htmlFor="settingsNote" className="form-label">Global Note</label>
+          <textarea id="settingsNote" className="form-control" rows={2}
+                    value={settings.note}
+                    onChange={e=>updateSetting('note', e.target.value)} />
+        </div>
+      </section>
+
+      {/* Completed & Cancelled Orders */}
       <section>
-        <h4>Completed Orders</h4>
+        <h4>Completed & Cancelled Orders</h4>
         <ul className="list-group">
-          {orders.filter(o => ['Completed', 'Delivered', 'Cancelled'].includes(o.status)).map(o => (
+          {orders.filter(o => ['Completed','Delivered','Cancelled'].includes(o.status)).map(o => (
             <li key={o._id} className="list-group-item">
-              <div><strong>Order ID:</strong> {o._id} — <strong>{o.name}</strong> ({o.mobile})</div>
-              <div><strong>Placed at:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
-              <div><strong>Completed at:</strong> {o.completedAt ? `${formatDate(o.completedAt)} ${new Date(o.completedAt).toLocaleTimeString()}` : '—'}</div>
-              <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price * i.qty}</li>)}</ul>
+              <div><strong>Order ID:</strong> {o._id} — {o.name}</div>
+              <div><strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
+              <div><strong>Completed:</strong> {o.completedAt ? `${formatDate(o.completedAt)} ${new Date(o.completedAt).toLocaleTimeString()}` : '—'}</div>
+              <ul>{o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{i.price*i.qty}</li>)}</ul>
               <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
               <div><strong>Status:</strong> {o.status}</div>
+              {/* Always show cancellation reason */}
+              {o.status === 'Cancelled' && o.cancellationNote && (
+                <div className="mt-2 alert alert-danger">
+                  <strong>Cancellation Reason:</strong> {o.cancellationNote}
+                </div>
+              )}
             </li>
           ))}
         </ul>
       </section>
     </div>
-);
+  );
 }
