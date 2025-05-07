@@ -25,31 +25,28 @@ export default function CustomerShop() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // fetch menu
+    // load menu and categories
     axios.get('http://localhost:3001/api/menu').then(r => {
       setMenu(r.data);
       setCategories([...new Set(r.data.map(i => i.category))]);
     });
-
-    // fetch settings initially
+    // load settings
     axios.get('http://localhost:3001/api/settings').then(r => setSettings(r.data));
-
-    // subscribe to settings changes
+    // subscribe to live settings updates
     const sock = io('http://localhost:3001');
     sock.on('settingsUpdated', s => setSettings(s));
-
     return () => sock.disconnect();
   }, []);
 
   const inc = id => {
-    const updated = { ...cart, [id]: (cart[id] || 0) + 1 };
-    setCart(updated);
-    localStorage.setItem('cart', JSON.stringify(updated));
+    const u = { ...cart, [id]: (cart[id] || 0) + 1 };
+    setCart(u);
+    localStorage.setItem('cart', JSON.stringify(u));
   };
   const dec = id => {
-    const updated = { ...cart, [id]: Math.max((cart[id] || 0) - 1, 0) };
-    setCart(updated);
-    localStorage.setItem('cart', JSON.stringify(updated));
+    const u = { ...cart, [id]: Math.max((cart[id] || 0) - 1, 0) };
+    setCart(u);
+    localStorage.setItem('cart', JSON.stringify(u));
   };
 
   const filteredMenu = menu.filter(item =>
@@ -70,19 +67,26 @@ export default function CustomerShop() {
 
       {settings.showNotes && (
         <>
-          {settings.cafeClosed && (
-            <div className="alert alert-warning">{settings.note || 'Our cafe is currently closed.'}</div>
-          )}
-          {!settings.cafeClosed && (
+          {settings.cafeClosed ? (
+            <div className="alert alert-warning">
+              {settings.note || 'Our cafe is currently closed.'}
+            </div>
+          ) : (
             <>
               {!settings.dineInEnabled && (
-                <div className="alert alert-warning">Dine-in disabled: {settings.note}</div>
+                <div className="alert alert-warning">
+                  Dine-in disabled: {settings.note}
+                </div>
               )}
               {!settings.takeawayEnabled && (
-                <div className="alert alert-warning">Takeaway disabled: {settings.note}</div>
+                <div className="alert alert-warning">
+                  Takeaway disabled: {settings.note}
+                </div>
               )}
               {!settings.deliveryEnabled && (
-                <div className="alert alert-warning">Delivery disabled: {settings.note}</div>
+                <div className="alert alert-warning">
+                  Delivery disabled: {settings.note}
+                </div>
               )}
             </>
           )}
@@ -90,7 +94,7 @@ export default function CustomerShop() {
       )}
 
       <div className="mb-3">
-        <label htmlFor="categorySelect" className="form-label">Select Category:</label>
+        <label htmlFor="categorySelect" className="form-label">Category</label>
         <input
           id="categorySelect"
           className="form-control mb-2"
@@ -147,22 +151,18 @@ export default function CustomerShop() {
                     <h5 className="card-title">{item.name}</h5>
                     <p className="card-text">₹{item.price.toFixed(2)}</p>
                     <div className="mt-auto d-flex align-items-center">
-                      <button
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => dec(item._id)}
-                      >–</button>
+                      <button className="btn btn-sm btn-outline-secondary" onClick={() => dec(item._id)}>–</button>
                       <span className="mx-2">{cart[item._id] || 0}</span>
-                      <button
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => inc(item._id)}
-                      >+</button>
+                      <button className="btn btn-sm btn-outline-secondary" onClick={() => inc(item._id)}>+</button>
                     </div>
                   </div>
                 </div>
               </div>
             ))}
             {filteredMenu.filter(i => i.category === cat).length === 0 && (
-              <div className="col-12"><p className="text-muted">No items in this category.</p></div>
+              <div className="col-12">
+                <p className="text-muted">No items in this category.</p>
+              </div>
             )}
           </div>
         </div>
@@ -171,7 +171,10 @@ export default function CustomerShop() {
       <button
         className="btn btn-success mt-4"
         onClick={() => navigate('/cart')}
-        disabled={!Object.values(cart).some(q => q > 0) || settings.cafeClosed}
+        disabled={
+          !Object.values(cart).some(q => q > 0) ||
+          settings.cafeClosed
+        }
       >
         Go to Cart
       </button>

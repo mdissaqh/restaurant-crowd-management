@@ -6,11 +6,11 @@ import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 
 export default function CartPage() {
-  const [menu, setMenu]               = useState([]);
-  const [cart, setCart]               = useState(() => JSON.parse(localStorage.getItem('cart') || '{}'));
-  const [serviceType, setServiceType] = useState('Dine-in');
-  const [address, setAddress]         = useState('');
-  const [settings, setSettings]       = useState({
+  const [menu, setMenu]                 = useState([]);
+  const [cart, setCart]                 = useState(() => JSON.parse(localStorage.getItem('cart') || '{}'));
+  const [serviceType, setServiceType]   = useState('Dine-in');
+  const [address, setAddress]           = useState('');
+  const [settings, setSettings]         = useState({
     dineInEnabled: true,
     takeawayEnabled: true,
     deliveryEnabled: true,
@@ -25,7 +25,6 @@ export default function CartPage() {
   useEffect(() => {
     axios.get('http://localhost:3001/api/menu').then(r => setMenu(r.data));
     axios.get('http://localhost:3001/api/settings').then(r => setSettings(r.data));
-
     const sock = io('http://localhost:3001');
     sock.on('settingsUpdated', s => setSettings(s));
     return () => sock.disconnect();
@@ -86,10 +85,9 @@ export default function CartPage() {
 
       {settings.showNotes && (
         <>
-          {settings.cafeClosed && (
+          {settings.cafeClosed ? (
             <div className="alert alert-warning">{settings.note || 'Cafe is closed'}</div>
-          )}
-          {!settings.cafeClosed && (
+          ) : (
             <>
               {!settings.dineInEnabled && <div className="alert alert-warning">Dine-in disabled: {settings.note}</div>}
               {!settings.takeawayEnabled && <div className="alert alert-warning">Takeaway disabled: {settings.note}</div>}
