@@ -1,3 +1,5 @@
+// backend/server.js
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 const express = require('express');
@@ -8,14 +10,13 @@ const path = require('path');
 const { Server } = require('socket.io');
 
 const MenuItem = require('./models/MenuItem');
-const Order = require('./models/Order');
+const Order    = require('./models/Order');
+const Settings = require('./models/Settings');
 
-const app = express();
+const app    = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-  },
+const io     = new Server(server, {
+  cors: { origin: '*' }
 });
 
 app.use(cors());
@@ -24,17 +25,23 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
+  filename:    (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 const upload = multer({ storage });
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurant', {
   useNewUrlParser: true,
-  useUnifiedTopology: true,
+  useUnifiedTopology: true
 });
 
-// ===== MENU ROUTES =====
+// Initialize single Settings doc
+let appSettings;
+Settings.findOne().then(doc => {
+  if (!doc) return Settings.create({});
+  return doc;
+}).then(doc => appSettings = doc);
 
+// ===== MENU =====
 app.get('/api/menu', async (req, res) => {
   const items = await MenuItem.find();
   res.json(items);
@@ -44,7 +51,7 @@ app.post('/api/menu', upload.single('image'), async (req, res) => {
   const { name, price, category } = req.body;
   const image = req.file ? `/uploads/${req.file.filename}` : '';
   const item = new MenuItem({ name, price: +price, image, category });
-  const doc = await item.save();
+  const doc  = await item.save();
   res.status(201).json(doc);
 });
 
@@ -57,10 +64,24 @@ app.delete('/api/menu/:id', async (req, res) => {
   }
 });
 
-// ===== ORDER ROUTES =====
-
+// ===== ORDER =====
 app.post('/api/order', async (req, res) => {
   const { name, mobile, email, serviceType, address, items, lat, lng, formattedAddress } = req.body;
+
+  // enforce settings
+  if (appSettings.cafeClosed) {
+    return res.status(403).json({ error: `Cafe closed: ${appSettings.note}` });
+  }
+  if (serviceType === 'Dine-in'  && !appSettings.dineInEnabled)  {
+    return res.status(403).json({ error: `Dine-in disabled: ${appSettings.note}` });
+  }
+  if (serviceType === 'Takeaway' && !appSettings.takeawayEnabled) {
+    return res.status(403).json({ error: `Takeaway disabled: ${appSettings.note}` });
+  }
+  if (serviceType === 'Delivery' && !appSettings.deliveryEnabled) {
+    return res.status(403).json({ error: `Delivery disabled: ${appSettings.note}` });
+  }
+
   const detailed = await Promise.all(
     items.map(async ({ id, qty }) => {
       const m = await MenuItem.findById(id);
@@ -68,6 +89,7 @@ app.post('/api/order', async (req, res) => {
     })
   );
   const total = detailed.reduce((sum, i) => sum + i.price * i.qty, 0);
+
   const order = new Order({
     name,
     mobile,
@@ -98,7 +120,7 @@ app.get('/api/orders', async (req, res) => {
 });
 
 app.post('/api/order/update', async (req, res) => {
-  const { id, status, estimatedTime } = req.body;
+  const { id, status, estimatedTime, cancellationNote } = req.body;
   const o = await Order.findById(id);
   if (!o) return res.status(404).json({ error: 'Order not found' });
 
@@ -108,7 +130,11 @@ app.post('/api/order/update', async (req, res) => {
 
   if (status) {
     o.status = status;
-    if (['Completed', 'Delivered', 'Cancelled'].includes(status)) {
+    if (status === 'Cancelled') {
+      o.cancellationNote = cancellationNote || '';
+      o.completedAt = new Date();
+    }
+    if (['Completed', 'Delivered'].includes(status)) {
       o.completedAt = new Date();
     }
   }
@@ -118,13 +144,25 @@ app.post('/api/order/update', async (req, res) => {
   res.json(o);
 });
 
-// Socket connection
-io.on('connection', (sock) => {
+// ===== SETTINGS =====
+app.get('/api/settings', async (req, res) => {
+  const settings = await Settings.findOne();
+  res.json(settings);
+});
+
+app.post('/api/settings', async (req, res) => {
+  const updates = req.body;
+  const settings = await Settings.findOneAndUpdate({}, updates, { new: true });
+  appSettings = settings;
+  io.emit('settingsUpdated', settings);
+  res.json(settings);
+});
+
+// Socket
+io.on('connection', sock => {
   console.log('Socket connected:', sock.id);
 });
 
-// Server start
+// Start
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on ${PORT}`));

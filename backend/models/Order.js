@@ -1,3 +1,5 @@
+// backend/models/Order.js
+
 const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
@@ -41,6 +43,10 @@ const orderSchema = new mongoose.Schema({
   status: { 
     type: String, 
     default: 'Pending' 
+  },
+  cancellationNote: {            // ← Added field
+    type: String,
+    default: ''
   },
   completedAt: Date
 }, {
