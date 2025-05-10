@@ -1,3 +1,6 @@
+/* frontend/src/App.css */
+
+/* Existing styles */
 .App {
   text-align: center;
 }
@@ -37,8 +40,7 @@
   }
 }
 
-/* ── NEW: star‑rating button styles ─────────────────────────────────────────── */
-
+/* Star-rating button styles */
 .btn-star {
   background: transparent;
   border: none;
@@ -50,3 +52,20 @@
   color: gold;
 }
 
+/* Branding headers */
+.admin-header,
+.customer-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.admin-header img,
+.customer-header img {
+  height: 40px;
+}
+
+.admin-header h1,
+.customer-header h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
