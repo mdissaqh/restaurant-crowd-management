@@ -7,12 +7,12 @@ import { useNavigate } from 'react-router-dom';
 import Cart from './Cart';
 
 export default function CustomerShop() {
-  const [menu, setMenu]               = useState([]);
-  const [categories, setCategories]   = useState([]);
+  const [menu, setMenu]             = useState([]);
+  const [categories, setCategories] = useState([]);
   const [selectedCat, setSelectedCat] = useState('All');
-  const [searchTerm, setSearchTerm]   = useState('');
-  const [cart, setCart]               = useState(() => JSON.parse(localStorage.getItem('cart') || '{}'));
-  const [settings, setSettings]       = useState({
+  const [searchTerm, setSearchTerm] = useState('');
+  const [cart, setCart]             = useState(() => JSON.parse(localStorage.getItem('cart') || '{}'));
+  const [settings, setSettings]     = useState({
     dineInEnabled: true,
     takeawayEnabled: true,
     deliveryEnabled: true,
@@ -25,14 +25,11 @@ export default function CustomerShop() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // load menu and categories
     axios.get('http://localhost:3001/api/menu').then(r => {
       setMenu(r.data);
       setCategories([...new Set(r.data.map(i => i.category))]);
     });
-    // load settings
     axios.get('http://localhost:3001/api/settings').then(r => setSettings(r.data));
-    // subscribe to live settings updates
     const sock = io('http://localhost:3001');
     sock.on('settingsUpdated', s => setSettings(s));
     return () => sock.disconnect();
@@ -63,7 +60,27 @@ export default function CustomerShop() {
     <div className="container py-4 position-relative">
       <Cart cart={cart} menu={menu} />
 
-      <h2>Welcome, {user.name}</h2>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2>Welcome, {user.name}</h2>
+        <div>
+          <button
+            className="btn btn-outline-secondary me-2"
+            onClick={() => navigate('/my-orders')}
+          >
+            My Orders
+          </button>
+          <button
+            className="btn btn-success"
+            onClick={() => navigate('/cart')}
+            disabled={
+              !Object.values(cart).some(q => q > 0) ||
+              settings.cafeClosed
+            }
+          >
+            Go to Cart
+          </button>
+        </div>
+      </div>
 
       {settings.showNotes && (
         <>
@@ -107,6 +124,7 @@ export default function CustomerShop() {
           <option value="All" />
           {categories.map(c => <option key={c} value={c} />)}
         </datalist>
+
         <div className="d-flex flex-wrap gap-2 mt-2">
           <button
             className={`btn btn-sm ${selectedCat === 'All' ? 'btn-primary' : 'btn-outline-primary'}`}
@@ -124,6 +142,7 @@ export default function CustomerShop() {
             </button>
           ))}
         </div>
+
         <input
           type="text"
           className="form-control mt-2"
@@ -167,17 +186,6 @@ export default function CustomerShop() {
           </div>
         </div>
       ))}
-
-      <button
-        className="btn btn-success mt-4"
-        onClick={() => navigate('/cart')}
-        disabled={
-          !Object.values(cart).some(q => q > 0) ||
-          settings.cafeClosed
-        }
-      >
-        Go to Cart
-      </button>
     </div>
   );
 }
