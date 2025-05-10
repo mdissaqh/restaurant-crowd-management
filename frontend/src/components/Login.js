@@ -1,25 +1,35 @@
+// frontend/src/components/Login.js
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
-  const [name, setName] = useState('');
+  const [name, setName]     = useState('');
   const [mobile, setMobile] = useState('');
-  const navigate = useNavigate();
+  const navigate            = useNavigate();
 
   const submit = e => {
     e.preventDefault();
-    // Validate mobile length before proceeding
     if (mobile.length !== 10) {
       alert('Please enter a valid 10-digit mobile number');
       return;
     }
-
     localStorage.setItem('user', JSON.stringify({ name, mobile: `+91${mobile}` }));
     navigate('/shop');
   };
 
   return (
     <div className="container py-5" style={{ maxWidth: 400 }}>
+      {/* Branding Header */}
+      <header className="customer-header d-flex align-items-center mb-4">
+        <img
+          src="/Millennialscafe.jpg"
+          alt="Millennials Cafe Logo"
+          style={{ height: 40, marginRight: 12 }}
+        />
+        <h1 className="h4 mb-0">MILLENNIALS CAFE</h1>
+      </header>
+
       <h2>Customer Login</h2>
       <form onSubmit={submit}>
         <div className="mb-3">
