@@ -1,5 +1,3 @@
-// backend/server.js
-
 require('dotenv').config();
 const mongoose = require('mongoose');
 const express  = require('express');
@@ -61,6 +59,17 @@ app.delete('/api/menu/:id', async (req,res) => {
 // --- ORDER ---
 app.post('/api/order', async (req,res) => {
   const { name,mobile,email,serviceType,address,items,lat,lng,formattedAddress } = req.body;
+
+  // enforce structured address if Delivery
+  if (serviceType === 'Delivery') {
+    const fields = ['flat','area','landmark','city','pincode','mobile'];
+    for (let f of fields) {
+      if (!address[f] || address[f].toString().trim() === '') {
+        return res.status(400).json({ error: `Missing delivery address field: ${f}` });
+      }
+    }
+  }
+
   if (appSettings.cafeClosed)     return res.status(403).json({ error: appSettings.note });
   if (!appSettings.dineInEnabled && serviceType==='Dine-in')   return res.status(403).json({ error: appSettings.note });
   if (!appSettings.takeawayEnabled && serviceType==='Takeaway') return res.status(403).json({ error: appSettings.note });
@@ -70,9 +79,31 @@ app.post('/api/order', async (req,res) => {
     const m = await MenuItem.findById(id);
     return { id, name:m.name, price:m.price, qty };
   }));
-  const total = detailed.reduce((s,i)=>s + i.price*i.qty, 0);
+  const baseTotal = detailed.reduce((s,i)=>s + i.price*i.qty, 0);
 
-  const order = await new Order({ name,mobile,email,serviceType,address,items:detailed,total,lat,lng,formattedAddress }).save();
+  // calculate taxes & delivery fee
+  const s = await Settings.findOne();
+  const cgstAmt     = +(baseTotal * s.cgstPercent/100).toFixed(2);
+  const sgstAmt     = +(baseTotal * s.sgstPercent/100).toFixed(2);
+  const deliveryFee = serviceType==='Delivery' ? s.deliveryCharge : 0;
+  const grandTotal  = baseTotal + cgstAmt + sgstAmt + deliveryFee;
+
+  const order = await new Order({
+    name,
+    mobile,
+    email,
+    serviceType,
+    address: serviceType==='Delivery' ? JSON.stringify(address) : '',
+    items: detailed,
+    total: grandTotal,
+    cgstAmount: cgstAmt,
+    sgstAmount: sgstAmt,
+    deliveryCharge: deliveryFee,
+    lat,
+    lng,
+    formattedAddress
+  }).save();
+
   io.emit('newOrder', order);
   res.status(201).json(order);
 });
@@ -108,7 +139,7 @@ app.post('/api/order/update', async (req,res) => {
   res.json(o);
 });
 
-// --- NEW: feedback endpoint ---
+// --- FEEDBACK ---
 app.post('/api/order/feedback', async (req, res) => {
   const { id, rating, feedback } = req.body;
   if (!id || rating == null) return res.status(400).json({ error: 'Missing id or rating' });
