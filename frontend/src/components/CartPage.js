@@ -1,5 +1,3 @@
-// frontend/src/components/CartPage.js
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import io from 'socket.io-client';
@@ -9,14 +7,22 @@ export default function CartPage() {
   const [menu, setMenu]                 = useState([]);
   const [cart, setCart]                 = useState(() => JSON.parse(localStorage.getItem('cart') || '{}'));
   const [serviceType, setServiceType]   = useState('Dine-in');
-  const [address, setAddress]           = useState('');
   const [settings, setSettings]         = useState({
     dineInEnabled: true,
     takeawayEnabled: true,
     deliveryEnabled: true,
     cafeClosed: false,
     showNotes: false,
-    note: ''
+    note: '',
+    cgstPercent: 0,
+    sgstPercent: 0,
+    deliveryCharge: 0
+  });
+
+  // NEW structured address state
+  const [address, setAddress] = useState({
+    flat: '', area: '', landmark: '',
+    city: '', pincode: '', mobile: ''
   });
 
   const user     = JSON.parse(localStorage.getItem('user'));
@@ -37,7 +43,11 @@ export default function CartPage() {
       return { ...m, qty };
     });
 
-  const total = items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
+  const baseTotal = items.reduce((sum, i) => sum + (i.price || 0) * i.qty, 0);
+  const cgstAmt     = +(baseTotal * settings.cgstPercent/100).toFixed(2);
+  const sgstAmt     = +(baseTotal * settings.sgstPercent/100).toFixed(2);
+  const deliveryFee = serviceType==='Delivery' ? settings.deliveryCharge : 0;
+  const grandTotal  = baseTotal + cgstAmt + sgstAmt + deliveryFee;
 
   const canCheckout =
     !settings.cafeClosed &&
@@ -48,19 +58,31 @@ export default function CartPage() {
   const submitOrder = async e => {
     e.preventDefault();
     if (!items.length) return alert('Cart is empty');
+
+    if (serviceType === 'Delivery') {
+      // validate structured address
+      for (let f of ['flat','area','landmark','city','pincode','mobile']) {
+        if (!address[f].trim()) {
+          return alert(`Please fill in ${f}`);
+        }
+      }
+    }
+
     if (!canCheckout) return alert(settings.note || 'Service unavailable');
+
     const payload = {
       name: user.name,
       mobile: user.mobile,
       email: '',
       serviceType,
-      address: serviceType === 'Delivery' ? address : '',
+      address: serviceType==='Delivery' ? address : {},
       items: items.map(i => ({ id: i._id, qty: i.qty }))
     };
+
     try {
       await axios.post('http://localhost:3001/api/order', payload);
       localStorage.removeItem('cart');
-      alert('Order placed!');
+      alert(`Order placed! Total: ₹${grandTotal.toFixed(2)}`);
       navigate('/my-orders');
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to place order');
@@ -78,10 +100,15 @@ export default function CartPage() {
         </div>
       ))}
 
-      <div className="d-flex justify-content-between fw-bold mb-3">
-        <span>Total:</span>
-        <span>₹{total.toFixed(2)}</span>
-      </div>
+      <hr />
+
+      <div className="mb-2">Subtotal: ₹{baseTotal.toFixed(2)}</div>
+      <div className="mb-2">CGST ({settings.cgstPercent}%): ₹{cgstAmt.toFixed(2)}</div>
+      <div className="mb-2">SGST ({settings.sgstPercent}%): ₹{sgstAmt.toFixed(2)}</div>
+      {serviceType==='Delivery' && (
+        <div className="mb-2">Delivery Charge: ₹{deliveryFee.toFixed(2)}</div>
+      )}
+      <h5>Total: ₹{grandTotal.toFixed(2)}</h5>
 
       {settings.showNotes && (
         <>
@@ -113,12 +140,35 @@ export default function CartPage() {
 
       {serviceType === 'Delivery' && (
         <div className="mb-3">
-          <label>Delivery Address</label>
-          <textarea
-            className="form-control"
-            required
-            value={address}
-            onChange={e => setAddress(e.target.value)}
+          <label>Flat / House no. / Bldg:</label>
+          <input className="form-control mb-2" required
+            value={address.flat}
+            onChange={e=>setAddress(a=>({...a,flat:e.target.value}))}
+          />
+          <label>Area / Street / Sector / Village:</label>
+          <input className="form-control mb-2" required
+            value={address.area}
+            onChange={e=>setAddress(a=>({...a,area:e.target.value}))}
+          />
+          <label>Landmark:</label>
+          <input className="form-control mb-2" required
+            value={address.landmark}
+            onChange={e=>setAddress(a=>({...a,landmark:e.target.value}))}
+          />
+          <label>Town / City:</label>
+          <input className="form-control mb-2" required
+            value={address.city}
+            onChange={e=>setAddress(a=>({...a,city:e.target.value}))}
+          />
+          <label>Pincode:</label>
+          <input type="text" className="form-control mb-2" required
+            value={address.pincode}
+            onChange={e=>setAddress(a=>({...a,pincode:e.target.value}))}
+          />
+          <label>Mobile number:</label>
+          <input type="tel" className="form-control" required
+            value={address.mobile}
+            onChange={e=>setAddress(a=>({...a,mobile:e.target.value}))}
           />
         </div>
       )}

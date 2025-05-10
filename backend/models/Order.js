@@ -1,5 +1,3 @@
-// backend/models/Order.js
-
 const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
@@ -21,6 +19,7 @@ const orderSchema = new mongoose.Schema({
     required: true 
   },
   address: { 
+    // for Delivery: JSON-stringified object of the six fields
     type: String, 
     default: '' 
   },
@@ -39,6 +38,11 @@ const orderSchema = new mongoose.Schema({
     type: Number, 
     required: true 
   },
+  // ← NEW persisted tax/fee fields
+  cgstAmount:     { type: Number, default: 0 },
+  sgstAmount:     { type: Number, default: 0 },
+  deliveryCharge: { type: Number, default: 0 },
+
   estimatedTime: Number,
   status: { 
     type: String, 
@@ -50,7 +54,7 @@ const orderSchema = new mongoose.Schema({
   },
   completedAt: Date,
 
-  // ← NEW feedback fields
+  // ← feedback fields
   rating: {
     type: Number,
     min: 1,
