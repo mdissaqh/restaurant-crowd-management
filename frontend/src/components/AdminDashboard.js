@@ -17,16 +17,16 @@ import {
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('earnings');
-  const [menu, setMenu]             = useState([]);
-  const [orders, setOrders]         = useState([]);
+  const [menu, setMenu] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [earningStats, setEarningStats] = useState({
     today: 0, week: 0, month: 0, year: 0
   });
   const [rangeStart, setRangeStart] = useState('');
-  const [rangeEnd, setRangeEnd]     = useState('');
+  const [rangeEnd, setRangeEnd] = useState('');
   const [rangeTotal, setRangeTotal] = useState(0);
   const [categories, setCategories] = useState([]);
-  const [settings, setSettings]     = useState({
+  const [settings, setSettings] = useState({
     dineInEnabled: true,
     takeawayEnabled: true,
     deliveryEnabled: true,
@@ -38,7 +38,7 @@ export default function AdminDashboard() {
     overall: 0, week: 0, month: 0, year: 0, count: 0
   });
 
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     fetchMenu();
@@ -69,89 +69,99 @@ export default function AdminDashboard() {
   }
 
   function calcEarningsStats(list) {
-    const completed = list.filter(o => ['Completed','Delivered'].includes(o.status));
+    const completed = list.filter(o => ['Completed', 'Delivered'].includes(o.status));
     const now = new Date();
     const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todaySum = completed.filter(o => new Date(o.completedAt) >= startToday)
-                              .reduce((s,o)=>s+o.total,0);
+      .reduce((s, o) => s + o.total, 0);
+
     const day = now.getDay();
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()-day);
-    const weekEnd   = new Date(weekStart.getTime()+6*86400000);
-    const weekSum = completed.filter(o=>{const d=new Date(o.completedAt);return d>=weekStart&&d<=weekEnd})
-                             .reduce((s,o)=>s+o.total,0);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(),1);
-    const monthEnd   = new Date(now.getFullYear(), now.getMonth()+1,0,23,59,59);
-    const monthSum = completed.filter(o=>{const d=new Date(o.completedAt);return d>=monthStart&&d<=monthEnd})
-                              .reduce((s,o)=>s+o.total,0);
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
+    const weekEnd = new Date(weekStart.getTime() + 6 * 86400000);
+    const weekSum = completed.filter(o => {
+      const d = new Date(o.completedAt);
+      return d >= weekStart && d <= weekEnd;
+    }).reduce((s, o) => s + o.total, 0);
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const monthSum = completed.filter(o => {
+      const d = new Date(o.completedAt);
+      return d >= monthStart && d <= monthEnd;
+    }).reduce((s, o) => s + o.total, 0);
+
     const yearStart = new Date(now.getFullYear(), 0, 1);
-    const yearEnd   = new Date(now.getFullYear(),11,31,23,59,59);
-    const yearSum = completed.filter(o=>{const d=new Date(o.completedAt);return d>=yearStart&&d<=yearEnd})
-                             .reduce((s,o)=>s+o.total,0);
+    const yearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+    const yearSum = completed.filter(o => {
+      const d = new Date(o.completedAt);
+      return d >= yearStart && d <= yearEnd;
+    }).reduce((s, o) => s + o.total, 0);
+
     setEarningStats({ today: todaySum, week: weekSum, month: monthSum, year: yearSum });
   }
 
   function calcRange(list) {
-    if(!rangeStart||!rangeEnd) return;
-    const s=new Date(rangeStart); s.setHours(0,0,0,0);
-    const e=new Date(rangeEnd);   e.setHours(23,59,59,999);
+    if (!rangeStart || !rangeEnd) return;
+    const s = new Date(rangeStart); s.setHours(0, 0, 0, 0);
+    const e = new Date(rangeEnd); e.setHours(23, 59, 59, 999);
     const sum = list
-      .filter(o => ['Completed','Delivered'].includes(o.status))
+      .filter(o => ['Completed', 'Delivered'].includes(o.status))
       .filter(o => {
         const d = new Date(o.completedAt);
         return d >= s && d <= e;
       })
-      .reduce((s,o) => s + o.total, 0);
+      .reduce((s, o) => s + o.total, 0);
     setRangeTotal(sum);
   }
 
   function calcFeedbackStats(list) {
     const now = new Date();
     const day = now.getDay();
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()-day);
-    const weekEnd   = new Date(weekStart.getTime()+6*86400000);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(),1);
-    const monthEnd   = new Date(now.getFullYear(), now.getMonth()+1,0,23,59,59);
-    const yearStart  = new Date(now.getFullYear(),0,1);
-    const yearEnd    = new Date(now.getFullYear(),11,31,23,59,59);
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
+    const weekEnd = new Date(weekStart.getTime() + 6 * 86400000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const yearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
 
     const rated = list.filter(o => o.rating != null);
-    const avg = arr => arr.length ? arr.reduce((s,o) => s + o.rating, 0) / arr.length : 0;
+    const avg = arr => arr.length ? arr.reduce((s, o) => s + o.rating, 0) / arr.length : 0;
 
     setFeedbackStats({
       overall: avg(rated),
-      week:    avg(rated.filter(o => {
-                  const d = new Date(o.completedAt);
-                  return d >= weekStart && d <= weekEnd;
-                })),
-      month:   avg(rated.filter(o => {
-                  const d = new Date(o.completedAt);
-                  return d >= monthStart && d <= monthEnd;
-                })),
-      year:    avg(rated.filter(o => {
-                  const d = new Date(o.completedAt);
-                  return d >= yearStart && d <= yearEnd;
-                })),
+      week: avg(rated.filter(o => {
+        const d = new Date(o.completedAt);
+        return d >= weekStart && d <= weekEnd;
+      })),
+      month: avg(rated.filter(o => {
+        const d = new Date(o.completedAt);
+        return d >= monthStart && d <= monthEnd;
+      })),
+      year: avg(rated.filter(o => {
+        const d = new Date(o.completedAt);
+        return d >= yearStart && d <= yearEnd;
+      })),
       count: rated.length
     });
   }
 
   // --- Handlers ---
-  function addMenu(e){ 
-    e.preventDefault();  
+  function addMenu(e) {
+    e.preventDefault();
     const fd = new FormData(e.target);
     const newCat = fd.get('newCategory').trim();
     fd.set('category', newCat || fd.get('existingCategory'));
     axios.post('http://localhost:3001/api/menu', fd)
-         .then(() => { e.target.reset(); fetchMenu(); });
+      .then(() => { e.target.reset(); fetchMenu(); });
   }
-  function delMenu(id){ axios.delete(`http://localhost:3001/api/menu/${id}`).then(fetchMenu); }
-  function updateStatus(o){
+  function delMenu(id) { axios.delete(`http://localhost:3001/api/menu/${id}`).then(fetchMenu); }
+  function updateStatus(o) {
     const flow = o.serviceType !== 'Delivery'
-      ? ['Pending','In Progress','Ready','Completed']
-      : ['Pending','In Progress','Ready for Pickup','Out for Delivery','Delivered'];
+      ? ['Pending', 'In Progress', 'Ready', 'Completed']
+      : ['Pending', 'In Progress', 'Ready for Pickup', 'Out for Delivery', 'Delivered'];
     const idx = flow.indexOf(o.status);
-    if (idx < 0 || idx === flow.length-1) return;
-    const next = flow[idx+1];
+    if (idx < 0 || idx === flow.length - 1) return;
+    const next = flow[idx + 1];
     const payload = { id: o._id, status: next };
     if (next === 'In Progress') {
       const mins = prompt('Enter estimated time (minutes):');
@@ -159,57 +169,51 @@ export default function AdminDashboard() {
       payload.estimatedTime = mins;
     }
     axios.post('http://localhost:3001/api/order/update', payload)
-         .then(fetchOrders);
+      .then(fetchOrders);
   }
-  function cancelOrder(o){
+  function cancelOrder(o) {
     const note = prompt('Enter cancellation reason:');
     if (note == null) return;
     axios.post('http://localhost:3001/api/order/update', {
-      id: o._id,
+      id: o.__id,
       status: 'Cancelled',
       cancellationNote: note
     }).then(fetchOrders);
   }
-  function updateSetting(k,v){
+  function updateSetting(k, v) {
     axios.post('http://localhost:3001/api/settings', { [k]: v })
-         .then(r => setSettings(r.data));
+      .then(r => setSettings(r.data));
   }
 
   // --- Render ---
   return (
-    <div className="d-flex" style={{minHeight:'100vh'}}>
+    <div className="d-flex" style={{ minHeight: '100vh' }}>
       {/* Sidebar */}
-      <nav className="bg-light p-3" style={{width:200}}>
+      <nav className="bg-light p-3" style={{ width: 200 }}>
         <ul className="list-unstyled">
-          <li className={`mb-3 ${activeTab==='earnings' && 'fw-bold'}`}
-              onClick={() => setActiveTab('earnings')}
-              style={{cursor:'pointer'}}>
-            <FaDollarSign className="me-2"/> Earnings
+          <li className={`mb-3 ${activeTab === 'earnings' && 'fw-bold'}`}
+            onClick={() => setActiveTab('earnings')} style={{ cursor: 'pointer' }}>
+            <FaDollarSign className="me-2" /> Earnings
           </li>
-          <li className={`mb-3 ${activeTab==='active' && 'fw-bold'}`}
-              onClick={() => setActiveTab('active')}
-              style={{cursor:'pointer'}}>
-            <FaClipboardList className="me-2"/> Active Orders
+          <li className={`mb-3 ${activeTab === 'active' && 'fw-bold'}`}
+            onClick={() => setActiveTab('active')} style={{ cursor: 'pointer' }}>
+            <FaClipboardList className="me-2" /> Active Orders
           </li>
-          <li className={`mb-3 ${activeTab==='completed' && 'fw-bold'}`}
-              onClick={() => setActiveTab('completed')}
-              style={{cursor:'pointer'}}>
-            <FaCheckCircle className="me-2"/> Completed & Cancelled Orders
+          <li className={`mb-3 ${activeTab === 'completed' && 'fw-bold'}`}
+            onClick={() => setActiveTab('completed')} style={{ cursor: 'pointer' }}>
+            <FaCheckCircle className="me-2" /> Completed & Cancelled Orders
           </li>
-          <li className={`mb-3 ${activeTab==='menu' && 'fw-bold'}`}
-              onClick={() => setActiveTab('menu')}
-              style={{cursor:'pointer'}}>
-            <FaUtensils className="me-2"/> Menu Management
+          <li className={`mb-3 ${activeTab === 'menu' && 'fw-bold'}`}
+            onClick={() => setActiveTab('menu')} style={{ cursor: 'pointer' }}>
+            <FaUtensils className="me-2" /> Menu Management
           </li>
-          <li className={`mb-3 ${activeTab==='feedback' && 'fw-bold'}`}
-              onClick={() => setActiveTab('feedback')}
-              style={{cursor:'pointer'}}>
-            <FaStar className="me-2"/> Feedback & Ratings
+          <li className={`mb-3 ${activeTab === 'feedback' && 'fw-bold'}`}
+            onClick={() => setActiveTab('feedback')} style={{ cursor: 'pointer' }}>
+            <FaStar className="me-2" /> Feedback & Ratings
           </li>
-          <li className={`mb-3 ${activeTab==='settings' && 'fw-bold'}`}
-              onClick={() => setActiveTab('settings')}
-              style={{cursor:'pointer'}}>
-            <FaCog className="me-2"/> Settings
+          <li className={`mb-3 ${activeTab === 'settings' && 'fw-bold'}`}
+            onClick={() => setActiveTab('settings')} style={{ cursor: 'pointer' }}>
+            <FaCog className="me-2" /> Settings
           </li>
         </ul>
       </nav>
@@ -218,9 +222,9 @@ export default function AdminDashboard() {
       <div className="flex-grow-1 p-4">
 
         {/* Earnings Tab */}
-        {activeTab==='earnings' && (
+        {activeTab === 'earnings' && (
           <section>
-            <h3><FaDollarSign className="me-2"/> Earnings</h3>
+            <h3><FaDollarSign className="me-2" /> Earnings</h3>
             <p><strong>Today:</strong> ₹{earningStats.today.toFixed(2)}</p>
             <p><strong>This Week:</strong> ₹{earningStats.week.toFixed(2)}</p>
             <p><strong>This Month:</strong> ₹{earningStats.month.toFixed(2)}</p>
@@ -252,25 +256,28 @@ export default function AdminDashboard() {
           </section>
         )}
 
-        {/* Active Orders Tab with "No active orders" message */}
-        {activeTab==='active' && (
+        {/* Active Orders Tab */}
+        {activeTab === 'active' && (
           <section>
-            <h3><FaClipboardList className="me-2"/> Active Orders</h3>
+            <h3><FaClipboardList className="me-2" /> Active Orders</h3>
             {(() => {
-              const activeOrders = orders.filter(o => !['Completed','Delivered','Cancelled'].includes(o.status));
+              const activeOrders = orders.filter(o => !['Completed', 'Delivered', 'Cancelled'].includes(o.status));
               if (activeOrders.length === 0) {
                 return <p>No active orders</p>;
               }
               return activeOrders.map(o => (
                 <div key={o._id} className="card mb-2 p-3">
                   <div><strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})</div>
-                  <div><strong>Placed:</strong> {formatDate(o.createdAt)}</div>
-                  {o.serviceType==='Delivery' && (
+                  <div>
+                    <strong>Placed:</strong> {formatDate(o.createdAt)}{' '}
+                    {new Date(o.createdAt).toLocaleTimeString()}
+                  </div>
+                  {o.serviceType === 'Delivery' && (
                     <div><strong>Address:</strong> {o.address}</div>
                   )}
                   <ul>
                     {o.items.map(i => (
-                      <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price*i.qty).toFixed(2)}</li>
+                      <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price * i.qty).toFixed(2)}</li>
                     ))}
                   </ul>
                   <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
@@ -288,24 +295,30 @@ export default function AdminDashboard() {
         )}
 
         {/* Completed & Cancelled Orders Tab */}
-        {activeTab==='completed' && (
+        {activeTab === 'completed' && (
           <section>
-            <h3><FaCheckCircle className="me-2"/> Completed & Cancelled Orders</h3>
+            <h3><FaCheckCircle className="me-2" /> Completed & Cancelled Orders</h3>
             {orders
-              .filter(o => ['Completed','Delivered','Cancelled'].includes(o.status))
+              .filter(o => ['Completed', 'Delivered', 'Cancelled'].includes(o.status))
               .map(o => (
                 <div key={o._id} className="card mb-2 p-3">
                   <div><strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})</div>
-                  <div><strong>Placed:</strong> {formatDate(o.createdAt)}</div>
-                  <div><strong>Completed:</strong> {formatDate(o.completedAt)}</div>
+                  <div>
+                    <strong>Placed:</strong> {formatDate(o.createdAt)}{' '}
+                    {new Date(o.createdAt).toLocaleTimeString()}
+                  </div>
+                  <div>
+                    <strong>Completed:</strong> {formatDate(o.completedAt)}{' '}
+                    {new Date(o.completedAt).toLocaleTimeString()}
+                  </div>
                   <ul>
                     {o.items.map(i => (
-                      <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price*i.qty).toFixed(2)}</li>
+                      <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price * i.qty).toFixed(2)}</li>
                     ))}
                   </ul>
                   <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
                   <div><strong>Status:</strong> {o.status}</div>
-                  {o.status==='Cancelled' && o.cancellationNote && (
+                  {o.status === 'Cancelled' && o.cancellationNote && (
                     <div><strong>Cancellation Reason:</strong> {o.cancellationNote}</div>
                   )}
                 </div>
@@ -315,9 +328,9 @@ export default function AdminDashboard() {
         )}
 
         {/* Menu Management Tab */}
-        {activeTab==='menu' && (
+        {activeTab === 'menu' && (
           <section>
-            <h3><FaUtensils className="me-2"/> Menu Management</h3>
+            <h3><FaUtensils className="me-2" /> Menu Management</h3>
             <form onSubmit={addMenu} className="mb-3 d-flex">
               <input name="name" placeholder="Item Name" required className="form-control me-2" />
               <input name="price" type="number" placeholder="Price" required className="form-control me-2" />
@@ -350,9 +363,9 @@ export default function AdminDashboard() {
         )}
 
         {/* Feedback & Ratings Tab */}
-        {activeTab==='feedback' && (
+        {activeTab === 'feedback' && (
           <section>
-            <h3><FaStar className="me-2"/> Feedback & Ratings</h3>
+            <h3><FaStar className="me-2" /> Feedback & Ratings</h3>
             <p>
               <strong>Overall:</strong> {feedbackStats.overall.toFixed(2)} ★ &nbsp;
               <strong>Last 7 days:</strong> {feedbackStats.week.toFixed(2)} ★ &nbsp;
@@ -362,33 +375,36 @@ export default function AdminDashboard() {
             </p>
             <ul className="list-group">
               {orders.filter(o => o.rating != null)
-                     .sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt))
-                     .map(o => (
-                <li key={o._id} className="list-group-item">
-                  <div><strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})</div>
-                  <div><strong>Placed:</strong> {formatDate(o.createdAt)}</div>
-                  <ul className="mb-1">
-                    {o.items.map(i => (
-                      <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price*i.qty).toFixed(2)}</li>
-                    ))}
-                  </ul>
-                  <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
-                  <div><strong>Status:</strong> {o.status}</div>
-                  <div className="mt-1">
-                    {'★'.repeat(o.rating)}{'☆'.repeat(5-o.rating)}
+                .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+                .map(o => (
+                  <li key={o._id} className="list-group-item">
+                    <div><strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})</div>
+                    <div>
+                      <strong>Placed:</strong> {formatDate(o.createdAt)}{' '}
+                      {new Date(o.createdAt).toLocaleTimeString()}
+                    </div>
+                    <ul className="mb-1">
+                      {o.items.map(i => (
+                        <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price * i.qty).toFixed(2)}</li>
+                      ))}
+                    </ul>
+                    <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
+                    <div><strong>Status:</strong> {o.status}</div>
+                    <div className="mt-1">
+                      {'★'.repeat(o.rating)}{'☆'.repeat(5 - o.rating)}
+                    </div>
                     {o.feedback && <p className="mt-1">“{o.feedback}”</p>}
-                  </div>
-                </li>
-              ))}
+                  </li>
+                ))}
             </ul>
           </section>
         )}
 
         {/* Settings Tab */}
-        {activeTab==='settings' && (
+        {activeTab === 'settings' && (
           <section>
-            <h3><FaCog className="me-2"/> Settings</h3>
-            {['dineIn','takeaway','delivery'].map(type => (
+            <h3><FaCog className="me-2" /> Settings</h3>
+            {['dineIn', 'takeaway', 'delivery'].map(type => (
               <div className="form-check" key={type}>
                 <input
                   id={`${type}Toggle`}
