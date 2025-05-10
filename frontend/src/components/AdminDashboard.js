@@ -1,5 +1,3 @@
-// frontend/src/components/AdminDashboard.js
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import io from 'socket.io-client';
@@ -249,12 +247,12 @@ export default function AdminDashboard() {
                 style={{ cursor: 'pointer' }}
               >
                 {{
-                  earnings:   <><FaDollarSign className="me-2" />Earnings</>,
-                  active:     <><FaClipboardList className="me-2" />Active Orders</>,
-                  completed:  <><FaCheckCircle className="me-2" />Completed & Cancelled</>,
-                  menu:       <><FaUtensils className="me-2" />Menu Management</>,
-                  feedback:   <><FaStar className="me-2" />Feedback & Ratings</>,
-                  settings:   <><FaCog className="me-2" />Settings</>
+                  earnings:   <> <FaDollarSign className="me-2" />Earnings</>,
+                  active:     <> <FaClipboardList className="me-2" />Active Orders</>,
+                  completed:  <> <FaCheckCircle className="me-2" />Completed & Cancelled</>,
+                  menu:       <> <FaUtensils className="me-2" />Menu Management</>,
+                  feedback:   <> <FaStar className="me-2" />Feedback & Ratings</>,
+                  settings:   <> <FaCog className="me-2" />Settings</>
                 }[tab]}
               </li>
             ))}
@@ -301,22 +299,38 @@ export default function AdminDashboard() {
           {activeTab === 'active' && (
             <section>
               <h3><FaClipboardList className="me-2" />Active Orders</h3>
-              {orders.filter(o => !['Completed','Delivered','Cancelled'].includes(o.status)).map(o => (
-                <div key={o._id} className="card mb-2 p-3">
-                  <div><strong>Order ID:</strong> {o._id} — {o.name} ({o.mobile})</div>
-                  <div><strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
-                  {o.serviceType === 'Delivery' && (
-                    <div><strong>Address:</strong> {renderAddress(o.address)}</div>
-                  )}
-                  <ul>
-                    {o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price*i.qty).toFixed(2)}</li>)}
-                  </ul>
-                  <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
-                  <div><strong>Status:</strong> {o.status}</div>
-                  <button className="btn btn-sm btn-info me-2" onClick={() => updateStatus(o)}>Next Status</button>
-                  <button className="btn btn-sm btn-danger" onClick={() => cancelOrder(o)}>Cancel</button>
-                </div>
-              ))}
+              {(() => {
+                const activeOrders = orders.filter(o => !['Completed','Delivered','Cancelled'].includes(o.status));
+                if (!activeOrders.length) {
+                  return <p className="text-muted">No active orders.</p>;
+                }
+                return activeOrders.map(o => {
+                  const subtotal = o.items.reduce((sum, i) => sum + i.price * i.qty, 0);
+                  return (
+                    <div key={o._id} className="card mb-2 p-3">
+                      <div><strong>Order ID:</strong> {o._id}</div>
+                      <div><strong>Name:</strong> {o.name} ({o.mobile})</div>
+                      <div><strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}</div>
+                      {o.serviceType === 'Delivery' && (
+                        <div><strong>Address:</strong> {renderAddress(o.address)}</div>
+                      )}
+                      <ul>
+                        {o.items.map(i => <li key={i.id}>{i.name} × {i.qty} = ₹{(i.price*i.qty).toFixed(2)}</li>)}
+                      </ul>
+                      <div><strong>Subtotal:</strong> ₹{subtotal.toFixed(2)}</div>
+                      <div><strong>CGST ({settings.cgstPercent}%):</strong> ₹{(o.cgstAmount||0).toFixed(2)}</div>
+                      <div><strong>SGST ({settings.sgstPercent}%):</strong> ₹{(o.sgstAmount||0).toFixed(2)}</div>
+                      {o.serviceType === 'Delivery' && (
+                        <div><strong>Delivery Charge:</strong> ₹{(o.deliveryCharge||0).toFixed(2)}</div>
+                      )}
+                      <div><strong>Total:</strong> ₹{o.total.toFixed(2)}</div>
+                      <div><strong>Status:</strong> {o.status}</div>
+                      <button className="btn btn-sm btn-info me-2" onClick={() => updateStatus(o)}>Next Status</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => cancelOrder(o)}>Cancel</button>
+                    </div>
+                  );
+                });
+              })()}
             </section>
           )}
 

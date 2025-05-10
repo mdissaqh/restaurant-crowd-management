@@ -10,17 +10,21 @@ export default function CartPage() {
   const [cart, setCart]               = useState(() => JSON.parse(localStorage.getItem('cart') || '{}'));
   const [serviceType, setServiceType] = useState('Dine-in');
   const [settings, setSettings]       = useState({
-    dineInEnabled: true,
-    takeawayEnabled: true,
-    deliveryEnabled: true,
-    cafeClosed: false,
-    showNotes: false,
-    note: '',
-    cgstPercent: 0,
-    sgstPercent: 0,
+    dineInEnabled:  true,
+    takeawayEnabled:true,
+    deliveryEnabled:true,
+    cafeClosed:     false,
+    showNotes:      false,
+    note:           '',
+    cgstPercent:    0,
+    sgstPercent:    0,
     deliveryCharge: 0
   });
-  const [address, setAddress] = useState({ flat:'', area:'', landmark:'', city:'', pincode:'', mobile:'' });
+  const [address, setAddress] = useState({
+    flat: '', area: '', landmark: '',
+    city: '', pincode: '', mobile: ''
+  });
+
   const user     = JSON.parse(localStorage.getItem('user'));
   const navigate = useNavigate();
 
@@ -49,7 +53,6 @@ export default function CartPage() {
     saveCart(nc);
   };
 
-  // split valid vs deleted
   const entries = Object.entries(cart).filter(([, qty]) => qty > 0);
   const validEntries   = entries.filter(([id]) => menu.some(m => m._id === id));
   const invalidEntries = entries.filter(([id]) => !menu.some(m => m._id === id));
@@ -109,10 +112,16 @@ export default function CartPage() {
       {invalidEntries.length > 0 && (
         <section className="mb-3">
           <h5>Unavailable Items</h5>
-          {invalidEntries.map(([id, qty]) => (
-            <div key={id} className="d-flex justify-content-between align-items-center p-2 bg-light border mb-1">
+          {invalidEntries.map(([id]) => (
+            <div
+              key={id}
+              className="d-flex justify-content-between align-items-center p-2 bg-light border mb-1"
+            >
               <span>This item was removed by admin</span>
-              <button className="btn btn-sm btn-outline-danger" onClick={() => removeItem(id)}>
+              <button
+                className="btn btn-sm btn-outline-danger"
+                onClick={() => removeItem(id)}
+              >
                 Remove
               </button>
             </div>
@@ -127,21 +136,43 @@ export default function CartPage() {
           style={{ gap: '1rem' }}
         >
           <div style={{ flex: 1 }}>{i.name}</div>
-          <div className="d-flex align-items-center" style={{ minWidth: 120, justifyContent: 'center' }}>
-            <button className="btn btn-sm btn-outline-secondary" onClick={() => dec(i._id)}>–</button>
-            <span className="mx-2" style={{ width:'2ch', textAlign:'center' }}>{i.qty}</span>
-            <button className="btn btn-sm btn-outline-secondary" onClick={() => inc(i._id)}>+</button>
+          <div
+            className="d-flex align-items-center"
+            style={{ minWidth: 120, justifyContent: 'center' }}
+          >
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => dec(i._id)}
+            >–</button>
+            <span
+              className="mx-2"
+              style={{ width: '2ch', textAlign: 'center' }}
+            >
+              {i.qty}
+            </span>
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => inc(i._id)}
+            >+</button>
           </div>
-          <div style={{ width:80, textAlign:'right' }}>₹{(i.price * i.qty).toFixed(2)}</div>
+          <div style={{ width: 80, textAlign: 'right' }}>
+            ₹{(i.price * i.qty).toFixed(2)}
+          </div>
         </div>
       ))}
 
       <hr />
 
       <div className="mb-2">Subtotal: ₹{baseTotal.toFixed(2)}</div>
-      <div className="mb-2">CGST ({settings.cgstPercent}%): ₹{cgstAmt.toFixed(2)}</div>
-      <div className="mb-2">SGST ({settings.sgstPercent}%): ₹{sgstAmt.toFixed(2)}</div>
-      {serviceType==='Delivery' && <div className="mb-2">Delivery Charge: ₹{deliveryFee.toFixed(2)}</div>}
+      <div className="mb-2">
+        CGST ({settings.cgstPercent}%): ₹{cgstAmt.toFixed(2)}
+      </div>
+      <div className="mb-2">
+        SGST ({settings.sgstPercent}%): ₹{sgstAmt.toFixed(2)}
+      </div>
+      {serviceType==='Delivery' && (
+        <div className="mb-2">Delivery Charge: ₹{deliveryFee.toFixed(2)}</div>
+      )}
       <h5>Total: ₹{grandTotal.toFixed(2)}</h5>
 
       {settings.showNotes && (
@@ -155,7 +186,7 @@ export default function CartPage() {
         <select
           className="form-select"
           value={serviceType}
-          onChange={e=>setServiceType(e.target.value)}
+          onChange={e => setServiceType(e.target.value)}
           disabled={settings.cafeClosed}
         >
           <option value="Dine-in" disabled={!settings.dineInEnabled}>Dine-in</option>
@@ -164,9 +195,52 @@ export default function CartPage() {
         </select>
       </div>
 
-      {serviceType==='Delivery' && (
+      {serviceType === 'Delivery' && (
         <div className="mb-3">
-          {/* your structured address inputs here */}
+          <label>Flat / House no. / Bldg:</label>
+          <input
+            className="form-control mb-2"
+            required
+            value={address.flat}
+            onChange={e=>setAddress(a=>({...a,flat:e.target.value}))}
+          />
+          <label>Area / Street / Sector / Village:</label>
+          <input
+            className="form-control mb-2"
+            required
+            value={address.area}
+            onChange={e=>setAddress(a=>({...a,area:e.target.value}))}
+          />
+          <label>Landmark:</label>
+          <input
+            className="form-control mb-2"
+            required
+            value={address.landmark}
+            onChange={e=>setAddress(a=>({...a,landmark:e.target.value}))}
+          />
+          <label>Town / City:</label>
+          <input
+            className="form-control mb-2"
+            required
+            value={address.city}
+            onChange={e=>setAddress(a=>({...a,city:e.target.value}))}
+          />
+          <label>Pincode:</label>
+          <input
+            type="text"
+            className="form-control mb-2"
+            required
+            value={address.pincode}
+            onChange={e=>setAddress(a=>({...a,pincode:e.target.value}))}
+          />
+          <label>Mobile number:</label>
+          <input
+            type="tel"
+            className="form-control"
+            required
+            value={address.mobile}
+            onChange={e=>setAddress(a=>({...a,mobile:e.target.value}))}
+          />
         </div>
       )}
 
