@@ -1,38 +1,55 @@
-// frontend/src/components/CartPage.js
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
+import { FaArrowLeft, FaShoppingCart, FaMapMarkerAlt } from 'react-icons/fa';
 
 export default function CartPage() {
-  const [menu, setMenu]               = useState([]);
-  const [cart, setCart]               = useState(() => JSON.parse(localStorage.getItem('cart') || '{}'));
+  const [menu, setMenu] = useState([]);
+  const [cart, setCart] = useState(() => JSON.parse(localStorage.getItem('cart') || '{}'));
   const [serviceType, setServiceType] = useState('Dine-in');
-  const [settings, setSettings]       = useState({
-    dineInEnabled:  true,
-    takeawayEnabled:true,
-    deliveryEnabled:true,
-    cafeClosed:     false,
-    showNotes:      false,
-    note:           '',
-    cgstPercent:    0,
-    sgstPercent:    0,
+  const [settings, setSettings] = useState({
+    dineInEnabled: true,
+    takeawayEnabled: true,
+    deliveryEnabled: true,
+    cafeClosed: false,
+    showNotes: false,
+    note: '',
+    cgstPercent: 0,
+    sgstPercent: 0,
     deliveryCharge: 0
   });
   const [address, setAddress] = useState({
     flat: '', area: '', landmark: '',
     city: '', pincode: '', mobile: ''
   });
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  const user     = JSON.parse(localStorage.getItem('user'));
+  const user = JSON.parse(localStorage.getItem('user'));
   const navigate = useNavigate();
 
   useEffect(() => {
-    axios.get('http://localhost:3001/api/menu').then(r => setMenu(r.data));
-    axios.get('http://localhost:3001/api/settings').then(r => setSettings(r.data));
+    setLoading(true);
+    Promise.all([
+      axios.get('http://localhost:3001/api/menu'),
+      axios.get('http://localhost:3001/api/settings')
+    ]).then(([menuRes, settingsRes]) => {
+      setMenu(menuRes.data);
+      setSettings(settingsRes.data);
+      setLoading(false);
+    }).catch(err => {
+      console.error(err);
+      setLoading(false);
+    });
+    
     const sock = io('http://localhost:3001');
-    sock.on('settingsUpdated', s => setSettings(s));
+    sock.on('settingsUpdated', () => {
+      axios.get('http://localhost:3001/api/settings')
+        .then(r => setSettings(r.data))
+        .catch(console.error);
+    });
+    
     return () => sock.disconnect();
   }, []);
 
@@ -40,13 +57,16 @@ export default function CartPage() {
     setCart(newCart);
     localStorage.setItem('cart', JSON.stringify(newCart));
   };
+  
   const inc = id => saveCart({ ...cart, [id]: (cart[id]||0) + 1 });
+  
   const dec = id => {
     const next = Math.max((cart[id]||0) - 1, 0);
     const nc = { ...cart, [id]: next };
     if (next === 0) delete nc[id];
     saveCart(nc);
   };
+  
   const removeItem = id => {
     const nc = { ...cart };
     delete nc[id];
@@ -54,7 +74,7 @@ export default function CartPage() {
   };
 
   const entries = Object.entries(cart).filter(([, qty]) => qty > 0);
-  const validEntries   = entries.filter(([id]) => menu.some(m => m._id === id));
+  const validEntries = entries.filter(([id]) => menu.some(m => m._id === id));
   const invalidEntries = entries.filter(([id]) => !menu.some(m => m._id === id));
 
   const items = validEntries.map(([id, qty]) => {
@@ -62,11 +82,11 @@ export default function CartPage() {
     return { ...m, qty };
   });
 
-  const baseTotal   = items.reduce((sum, i) => sum + (i.price||0) * i.qty, 0);
-  const cgstAmt     = +(baseTotal * settings.cgstPercent/100).toFixed(2);
-  const sgstAmt     = +(baseTotal * settings.sgstPercent/100).toFixed(2);
+  const baseTotal = items.reduce((sum, i) => sum + (i.price||0) * i.qty, 0);
+  const cgstAmt = +(baseTotal * settings.cgstPercent/100).toFixed(2);
+  const sgstAmt = +(baseTotal * settings.sgstPercent/100).toFixed(2);
   const deliveryFee = serviceType==='Delivery' ? settings.deliveryCharge : 0;
-  const grandTotal  = baseTotal + cgstAmt + sgstAmt + deliveryFee;
+  const grandTotal = baseTotal + cgstAmt + sgstAmt + deliveryFee;
 
   const canCheckout =
     !settings.cafeClosed &&
@@ -77,21 +97,32 @@ export default function CartPage() {
 
   const submitOrder = async e => {
     e.preventDefault();
-    if (!items.length) return alert('Cart is empty or only contains unavailable items.');
+    if (!items.length) {
+      alert('Cart is empty or only contains unavailable items.');
+      return;
+    }
 
     if (serviceType==='Delivery') {
       for (let f of ['flat','area','landmark','city','pincode','mobile']) {
-        if (!address[f].trim()) return alert(`Please fill in ${f}`);
+        if (!address[f].trim()) {
+          alert(`Please fill in ${f}`);
+          return;
+        }
       }
     }
-    if (!canCheckout) return alert(settings.note||'Service unavailable');
+    
+    if (!canCheckout) {
+      alert(settings.note||'Service unavailable');
+      return;
+    }
 
+    setSubmitting(true);
     const payload = {
       name: user.name,
       mobile: user.mobile,
       email: '',
       serviceType,
-      address: serviceType==='Delivery'?address:{},
+      address: serviceType==='Delivery' ? address : {},
       items: items.map(i => ({ id: i._id, qty: i.qty }))
     };
 
@@ -102,155 +133,266 @@ export default function CartPage() {
       navigate('/my-orders');
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to place order');
+    } finally {
+      setSubmitting(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ height: '100vh' }}>
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="container py-4">
-      <h2>Your Cart</h2>
-
-      {invalidEntries.length > 0 && (
-        <section className="mb-3">
-          <h5>Unavailable Items</h5>
-          {invalidEntries.map(([id]) => (
-            <div
-              key={id}
-              className="d-flex justify-content-between align-items-center p-2 bg-light border mb-1"
+    <div className="container py-5">
+      <div className="card mb-4">
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-center mb-4">
+            <h2 className="mb-0">
+              <FaShoppingCart className="me-2" /> Your Cart
+            </h2>
+            <button 
+              className="btn btn-outline-primary"
+              onClick={() => navigate('/shop')}
             >
-              <span>This item was removed by admin</span>
-              <button
-                className="btn btn-sm btn-outline-danger"
-                onClick={() => removeItem(id)}
-              >
-                Remove
-              </button>
+              <FaArrowLeft className="me-2" /> Back to Menu
+            </button>
+          </div>
+
+          {invalidEntries.length > 0 && (
+            <div className="alert alert-warning mb-4">
+              <h5>Unavailable Items</h5>
+              {invalidEntries.map(([id]) => (
+                <div
+                  key={id}
+                  className="d-flex justify-content-between align-items-center p-2 border-bottom"
+                >
+                  <span>This item was removed by admin</span>
+                  <button
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => removeItem(id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </section>
-      )}
+          )}
 
-      {items.map(i => (
-        <div
-          key={i._id}
-          className="d-flex align-items-center justify-content-between mb-2"
-          style={{ gap: '1rem' }}
-        >
-          <div style={{ flex: 1 }}>{i.name}</div>
-          <div
-            className="d-flex align-items-center"
-            style={{ minWidth: 120, justifyContent: 'center' }}
-          >
-            <button
-              className="btn btn-sm btn-outline-secondary"
-              onClick={() => dec(i._id)}
-            >–</button>
-            <span
-              className="mx-2"
-              style={{ width: '2ch', textAlign: 'center' }}
-            >
-              {i.qty}
-            </span>
-            <button
-              className="btn btn-sm btn-outline-secondary"
-              onClick={() => inc(i._id)}
-            >+</button>
-          </div>
-          <div style={{ width: 80, textAlign: 'right' }}>
-            ₹{(i.price * i.qty).toFixed(2)}
-          </div>
+          {items.length === 0 ? (
+            <div className="alert alert-info">
+              <p className="mb-0">Your cart is empty. Add some items from our menu.</p>
+            </div>
+          ) : (
+            <div className="card mb-4">
+              <div className="card-header">
+                <h5 className="mb-0">Order Items</h5>
+              </div>
+              <div className="card-body p-0">
+                <div className="table-responsive">
+                  <table className="table table-hover mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Item</th>
+                        <th style={{ width: "140px" }}>Quantity</th>
+                        <th style={{ width: "140px" }} className="text-end">Price</th>
+                        <th style={{ width: "50px" }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map(i => (
+                        <tr key={i._id}>
+                          <td className="align-middle">{i.name}</td>
+                          <td>
+                            <div className="d-flex align-items-center quantity-controls">
+                              <button
+                                className="btn btn-sm btn-outline-secondary quantity-btn"
+                                onClick={() => dec(i._id)}
+                              >–</button>
+                              <span className="quantity-display mx-2">{i.qty}</span>
+                              <button
+                                className="btn btn-sm btn-outline-secondary quantity-btn"
+                                onClick={() => inc(i._id)}
+                              >+</button>
+                            </div>
+                          </td>
+                          <td className="text-end align-middle">₹{(i.price * i.qty).toFixed(2)}</td>
+                          <td>
+                            <button
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => removeItem(i._id)}
+                            >
+                              ×
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {items.length > 0 && (
+            <>
+              <div className="row">
+                <div className="col-md-6 mb-4">
+                  <div className="card h-100">
+                    <div className="card-header">
+                      <h5 className="mb-0">Service Type</h5>
+                    </div>
+                    <div className="card-body">
+                      <select
+                        className="form-select mb-3"
+                        value={serviceType}
+                        onChange={e => setServiceType(e.target.value)}
+                        disabled={settings.cafeClosed}
+                      >
+                        <option value="Dine-in" disabled={!settings.dineInEnabled}>Dine-in</option>
+                        <option value="Takeaway" disabled={!settings.takeawayEnabled}>Takeaway</option>
+                        <option value="Delivery" disabled={!settings.deliveryEnabled}>Delivery</option>
+                      </select>
+
+                      {settings.showNotes && (
+                        <div className="alert alert-info mb-0">
+                          {settings.cafeClosed
+                            ? settings.note || 'Cafe is closed'
+                            : settings.note}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-md-6 mb-4">
+                  <div className="card h-100">
+                    <div className="card-header">
+                      <h5 className="mb-0">Order Summary</h5>
+                    </div>
+                    <div className="card-body">
+                      <div className="d-flex justify-content-between mb-2">
+                        <span>Subtotal:</span>
+                        <span>₹{baseTotal.toFixed(2)}</span>
+                      </div>
+                      <div className="d-flex justify-content-between mb-2">
+                        <span>CGST ({settings.cgstPercent}%):</span>
+                        <span>₹{cgstAmt.toFixed(2)}</span>
+                      </div>
+                      <div className="d-flex justify-content-between mb-2">
+                        <span>SGST ({settings.sgstPercent}%):</span>
+                        <span>₹{sgstAmt.toFixed(2)}</span>
+                      </div>
+                      {serviceType==='Delivery' && (
+                        <div className="d-flex justify-content-between mb-2">
+                          <span>Delivery Charge:</span>
+                          <span>₹{deliveryFee.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <hr />
+                      <div className="d-flex justify-content-between fw-bold">
+                        <span>Total:</span>
+                        <span className="text-primary fs-5">₹{grandTotal.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {serviceType === 'Delivery' && (
+                <div className="card mb-4">
+                  <div className="card-header d-flex align-items-center">
+                    <FaMapMarkerAlt className="me-2" />
+                    <h5 className="mb-0">Delivery Address</h5>
+                  </div>
+                  <div className="card-body">
+                    <div className="row g-3">
+                      <div className="col-md-6">
+                        <label className="form-label">Flat / House no. / Bldg</label>
+                        <input
+                          className="form-control"
+                          required
+                          value={address.flat}
+                          onChange={e=>setAddress(a=>({...a,flat:e.target.value}))}
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">Area / Street / Sector / Village</label>
+                        <input
+                          className="form-control"
+                          required
+                          value={address.area}
+                          onChange={e=>setAddress(a=>({...a,area:e.target.value}))}
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">Landmark</label>
+                        <input
+                          className="form-control"
+                          required
+                          value={address.landmark}
+                          onChange={e=>setAddress(a=>({...a,landmark:e.target.value}))}
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">Town / City</label>
+                        <input
+                          className="form-control"
+                          required
+                          value={address.city}
+                          onChange={e=>setAddress(a=>({...a,city:e.target.value}))}
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">Pincode</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          required
+                          value={address.pincode}
+                          onChange={e=>setAddress(a=>({...a,pincode:e.target.value}))}
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label">Mobile number</label>
+                        <input
+                          type="tel"
+                          className="form-control"
+                          required
+                          value={address.mobile}
+                          onChange={e=>setAddress(a=>({...a,mobile:e.target.value}))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="d-grid">
+                <button
+                  className="btn btn-primary btn-lg"
+                  onClick={submitOrder}
+                  disabled={!items.length || !canCheckout || submitting}
+                >
+                  {submitting ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Processing...
+                    </>
+                  ) : (
+                    'Place Order'
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </div>
-      ))}
-
-      <hr />
-
-      <div className="mb-2">Subtotal: ₹{baseTotal.toFixed(2)}</div>
-      <div className="mb-2">
-        CGST ({settings.cgstPercent}%): ₹{cgstAmt.toFixed(2)}
       </div>
-      <div className="mb-2">
-        SGST ({settings.sgstPercent}%): ₹{sgstAmt.toFixed(2)}
-      </div>
-      {serviceType==='Delivery' && (
-        <div className="mb-2">Delivery Charge: ₹{deliveryFee.toFixed(2)}</div>
-      )}
-      <h5>Total: ₹{grandTotal.toFixed(2)}</h5>
-
-      {settings.showNotes && (
-        <div className="alert alert-warning">
-          {settings.cafeClosed ? settings.note||'Cafe is closed' : settings.note}
-        </div>
-      )}
-
-      <div className="mb-3">
-        <label>Service:</label>
-        <select
-          className="form-select"
-          value={serviceType}
-          onChange={e => setServiceType(e.target.value)}
-          disabled={settings.cafeClosed}
-        >
-          <option value="Dine-in" disabled={!settings.dineInEnabled}>Dine-in</option>
-          <option value="Takeaway" disabled={!settings.takeawayEnabled}>Takeaway</option>
-          <option value="Delivery" disabled={!settings.deliveryEnabled}>Delivery</option>
-        </select>
-      </div>
-
-      {serviceType === 'Delivery' && (
-        <div className="mb-3">
-          <label>Flat / House no. / Bldg:</label>
-          <input
-            className="form-control mb-2"
-            required
-            value={address.flat}
-            onChange={e=>setAddress(a=>({...a,flat:e.target.value}))}
-          />
-          <label>Area / Street / Sector / Village:</label>
-          <input
-            className="form-control mb-2"
-            required
-            value={address.area}
-            onChange={e=>setAddress(a=>({...a,area:e.target.value}))}
-          />
-          <label>Landmark:</label>
-          <input
-            className="form-control mb-2"
-            required
-            value={address.landmark}
-            onChange={e=>setAddress(a=>({...a,landmark:e.target.value}))}
-          />
-          <label>Town / City:</label>
-          <input
-            className="form-control mb-2"
-            required
-            value={address.city}
-            onChange={e=>setAddress(a=>({...a,city:e.target.value}))}
-          />
-          <label>Pincode:</label>
-          <input
-            type="text"
-            className="form-control mb-2"
-            required
-            value={address.pincode}
-            onChange={e=>setAddress(a=>({...a,pincode:e.target.value}))}
-          />
-          <label>Mobile number:</label>
-          <input
-            type="tel"
-            className="form-control"
-            required
-            value={address.mobile}
-            onChange={e=>setAddress(a=>({...a,mobile:e.target.value}))}
-          />
-        </div>
-      )}
-
-      <button
-        className="btn btn-success"
-        onClick={submitOrder}
-        disabled={!items.length || !canCheckout}
-      >
-        Checkout
-      </button>
     </div>
   );
 }

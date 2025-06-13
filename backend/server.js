@@ -44,12 +44,14 @@ app.post('/api/menu', upload.single('image'), async (req,res) => {
   const { name, price, category } = req.body;
   const image = req.file?`/uploads/${req.file.filename}`:'';
   const doc = await new MenuItem({ name, price:+price, image, category }).save();
+  io.emit('menuUpdated'); // Send update to all clients
   res.status(201).json(doc);
 });
 
 app.delete('/api/menu/:id', async (req,res) => {
   try {
     await MenuItem.findByIdAndDelete(req.params.id);
+    io.emit('menuUpdated'); // Send update to all clients
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -166,8 +168,18 @@ app.post('/api/settings', async (req,res) => {
   res.json(appSettings);
 });
 
+// Socket connection handling
 io.on('connection', sock => {
   console.log('Socket connected:', sock.id);
+  
+  // Listen for client-triggered events
+  sock.on('menuUpdated', () => {
+    io.emit('menuUpdated');
+  });
+  
+  sock.on('settingsUpdated', () => {
+    io.emit('settingsUpdated');
+  });
 });
 
 const PORT = process.env.PORT || 3001;
