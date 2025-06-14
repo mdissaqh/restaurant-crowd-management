@@ -940,7 +940,7 @@ export default function AdminDashboard() {
             </section>
           )}
 
-          {/* Menu Management */}
+          {/* Enhanced Menu Management with Natural Image Display */}
           {activeTab === 'menu' && (
             <section className="settings-container">
               <h3 className="mb-4"><FaUtensils className="me-2" />Menu Management</h3>
@@ -997,13 +997,29 @@ export default function AdminDashboard() {
                     <div className="row">
                       {menu.filter(i=>i.category===cat).map(item => (
                         <div key={item._id} className="col-md-3 mb-3">
-                          <div className="card h-100 menu-item-card">
+                          <div className="card h-100" style={{ minHeight: '350px' }}>
                             {item.image && (
-                              <img
-                                src={`http://localhost:3001${item.image}`}
-                                className="card-img-top"
-                                alt={item.name}
-                              />
+                              <div className="position-relative" style={{ 
+                                minHeight: '200px', 
+                                maxHeight: '250px',
+                                overflow: 'hidden',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: '#f8f9fa'
+                              }}>
+                                <img
+                                  src={`http://localhost:3001${item.image}`}
+                                  className="img-fluid"
+                                  alt={item.name}
+                                  style={{
+                                    maxWidth: '100%',
+                                    maxHeight: '250px',
+                                    objectFit: 'contain',
+                                    objectPosition: 'center'
+                                  }}
+                                />
+                              </div>
                             )}
                             <div className="card-body d-flex flex-column">
                               <h5 className="card-title">{item.name}</h5>
@@ -1294,7 +1310,7 @@ export default function AdminDashboard() {
                
                 <div className="d-flex justify-content-end mt-4">
                   <button type="submit" className="btn btn-primary btn-lg">
-                    <FaSave className="me-2" /> Save Global Note,Tax & Delivery Settings
+                    <FaSave className="me-2" /> Save Tax & Delivery Settings
                   </button>
                 </div>
                
