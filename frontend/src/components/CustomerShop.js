@@ -88,8 +88,11 @@ export default function CustomerShop() {
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
+  // Updated logic: Only show categories that have matching items when searching
   const catsToRender = selectedCat === 'All'
-    ? categories
+    ? searchTerm.trim() 
+      ? [...new Set(filteredMenu.map(item => item.category))] // Only categories with matching items when searching
+      : categories // All categories when no search term
     : categories.includes(selectedCat)
       ? [selectedCat]
       : [];
@@ -244,18 +247,12 @@ export default function CustomerShop() {
                   </div>
                 </div>
               ))}
-              
-              {filteredMenu.filter(i => i.category === cat).length === 0 && (
-                <div className="alert alert-info w-100">
-                  <p className="mb-0">No items in this category.</p>
-                </div>
-              )}
             </div>
           </div>
         ))}
         
-        {/* No results message */}
-        {filteredMenu.length === 0 && (
+        {/* No results message - Only show when no categories have matching items */}
+        {catsToRender.length === 0 && (
           <div className="alert alert-warning">
             <p className="mb-0">No items match your search. Try a different term or category.</p>
           </div>

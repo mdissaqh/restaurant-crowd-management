@@ -542,3 +542,19 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #1B5E20;
 }
+.menu-item-image {
+  width: 100%;
+  max-height: 250px;
+  object-fit: contain;
+  object-position: center;
+  background-color: #f8f9fa;
+}
+
+.menu-card {
+  min-height: 350px;
+  transition: transform 0.2s ease-in-out;
+}
+
+.menu-card:hover {
+  transform: translateY(-2px);
+}
