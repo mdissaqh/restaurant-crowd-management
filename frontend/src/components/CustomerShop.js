@@ -1,9 +1,10 @@
+// frontend/src/components/CustomerShop.js
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import Cart from './Cart';
-import { FaSearch, FaShoppingCart, FaSignOutAlt, FaListAlt } from 'react-icons/fa';
+import { FaSearch, FaShoppingCart, FaSignOutAlt, FaListAlt, FaTimes, FaSpinner } from 'react-icons/fa';
 
 export default function CustomerShop() {
   const [menu, setMenu] = useState([]);
@@ -22,6 +23,11 @@ export default function CustomerShop() {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
   const [updateNotification, setUpdateNotification] = useState('');
+  
+  // Image modal states
+  const [modalImage, setModalImage] = useState(null);
+  const [modalImageLoading, setModalImageLoading] = useState(false);
+  const [imageLoadingStates, setImageLoadingStates] = useState({});
 
   const user = JSON.parse(localStorage.getItem('user'));
   const navigate = useNavigate();
@@ -59,14 +65,14 @@ export default function CustomerShop() {
     // Initialize socket connection
     const sock = io('http://localhost:3001');
     setSocket(sock);
-    
+   
     // Listen for real-time updates
     sock.on('menuUpdated', () => {
       console.log('Menu updated - refreshing menu data');
       fetchMenu();
       showUpdateNotification('Menu has been updated!');
     });
-    
+   
     sock.on('settingsUpdated', () => {
       console.log('Settings updated - refreshing settings data');
       fetchSettings();
@@ -81,12 +87,44 @@ export default function CustomerShop() {
     };
   }, []);
 
+  // Keyboard event handler for modal
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && modalImage) {
+        setModalImage(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [modalImage]);
+
   // Show update notification
   const showUpdateNotification = (message) => {
     setUpdateNotification(message);
     setTimeout(() => {
       setUpdateNotification('');
     }, 3000);
+  };
+
+  // Handle image click for modal view
+  const handleImageClick = (imageSrc, itemName) => {
+    setModalImageLoading(true);
+    setModalImage({ src: imageSrc, alt: itemName });
+  };
+
+  // Handle image load state
+  const handleImageLoad = (itemId) => {
+    setImageLoadingStates(prev => ({ ...prev, [itemId]: false }));
+    if (modalImage) {
+      setModalImageLoading(false);
+    }
+  };
+
+  const handleImageLoadStart = (itemId) => {
+    setImageLoadingStates(prev => ({ ...prev, [itemId]: true }));
   };
 
   const inc = id => {
@@ -151,9 +189,44 @@ export default function CustomerShop() {
 
       {/* Real-time Update Notification */}
       {updateNotification && (
-        <div className="alert alert-success alert-dismissible fade show position-fixed" 
+        <div className="alert alert-success alert-dismissible fade show position-fixed"
              style={{ top: '100px', right: '20px', zIndex: 1050, minWidth: '300px' }}>
           <strong>Update!</strong> {updateNotification}
+        </div>
+      )}
+
+      {/* Image Modal */}
+      {modalImage && (
+        <div className="image-modal-overlay" onClick={() => setModalImage(null)}>
+          <div className="image-modal-container">
+            <button 
+              className="image-modal-close"
+              onClick={() => setModalImage(null)}
+              aria-label="Close modal"
+            >
+              <FaTimes />
+            </button>
+            
+            {modalImageLoading && (
+              <div className="image-modal-loading">
+                <FaSpinner className="spinner" />
+                <span>Loading image...</span>
+              </div>
+            )}
+            
+            <img
+              src={modalImage.src}
+              alt={modalImage.alt}
+              className="image-modal-img"
+              onClick={(e) => e.stopPropagation()}
+              onLoad={() => setModalImageLoading(false)}
+              style={{ display: modalImageLoading ? 'none' : 'block' }}
+            />
+            
+            <div className="image-modal-caption">
+              {modalImage.alt}
+            </div>
+          </div>
         </div>
       )}
 
@@ -254,16 +327,28 @@ export default function CustomerShop() {
         {catsToRender.map(cat => (
           <div key={cat} className="mb-5">
             <h3 className="mb-3">{cat}</h3>
-            <div className="menu-grid">
+            <div className="menu-grid-enhanced">
               {filteredMenu.filter(i => i.category === cat).map(item => (
-                <div key={item._id} className="card h-100 menu-item-card">
+                <div key={item._id} className="card h-100 menu-item-card-enhanced">
                   {item.image && (
-                    <img
-                      src={`http://localhost:3001${item.image}`}
-                      className="card-img-top menu-item-image"
-                      alt={item.name}
-                    />
+                    <div className="menu-image-container">
+                      {imageLoadingStates[item._id] && (
+                        <div className="image-loading-overlay">
+                          <FaSpinner className="spinner" />
+                        </div>
+                      )}
+                      
+                      <img
+                        src={`http://localhost:3001${item.image}`}
+                        className="menu-item-image-enhanced"
+                        alt={item.name}
+                        onLoadStart={() => handleImageLoadStart(item._id)}
+                        onLoad={() => handleImageLoad(item._id)}
+                        onClick={() => handleImageClick(`http://localhost:3001${item.image}`, item.name)}
+                      />
+                    </div>
                   )}
+                  
                   <div className="card-body d-flex flex-column">
                     <h5 className="card-title">{item.name}</h5>
                     <p className="card-text text-primary fw-bold">₹{item.price.toFixed(2)}</p>
