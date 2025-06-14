@@ -1,3 +1,4 @@
+// backend/server.js
 require('dotenv').config();
 const mongoose = require('mongoose');
 const express  = require('express');
@@ -6,6 +7,7 @@ const cors     = require('cors');
 const multer   = require('multer');
 const path     = require('path');
 const { Server } = require('socket.io');
+const twilio   = require('twilio');
 
 const MenuItem = require('./models/MenuItem');
 const Order    = require('./models/Order');
@@ -24,6 +26,19 @@ const storage = multer.diskStorage({
   filename:    (req,file,cb)=>cb(null,Date.now()+path.extname(file.originalname))
 });
 const upload = multer({ storage });
+
+// --- Twilio setup ---
+const twClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+function sendSMS(to, body) {
+  return twClient.messages.create({
+    body,
+    from: process.env.TWILIO_PHONE_NUMBER,
+    to
+  }).catch(err => console.error('Twilio Error:', err));
+}
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurant', {
   useNewUrlParser: true,
@@ -50,7 +65,7 @@ app.post('/api/menu', upload.single('image'), async (req,res) => {
     category,
     isAvailable: isAvailable === 'true' || isAvailable === true
   }).save();
-  io.emit('menuUpdated'); // Send update to all clients
+  io.emit('menuUpdated');
   res.status(201).json(doc);
 });
 
@@ -59,26 +74,15 @@ app.put('/api/menu/:id', async (req,res) => {
   try {
     const { price, isAvailable } = req.body;
     const updateData = {};
-   
-    if (price !== undefined) {
-      updateData.price = +price;
-    }
-   
-    if (isAvailable !== undefined) {
-      updateData.isAvailable = isAvailable;
-    }
-   
+    if (price !== undefined)    updateData.price = +price;
+    if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
     const updatedItem = await MenuItem.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true }
     );
-   
-    if (!updatedItem) {
-      return res.status(404).json({ error: 'Menu item not found' });
-    }
-   
-    io.emit('menuUpdated'); // Send update to all clients
+    if (!updatedItem) return res.status(404).json({ error: 'Menu item not found' });
+    io.emit('menuUpdated');
     res.json(updatedItem);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -88,20 +92,20 @@ app.put('/api/menu/:id', async (req,res) => {
 app.delete('/api/menu/:id', async (req,res) => {
   try {
     await MenuItem.findByIdAndDelete(req.params.id);
-    io.emit('menuUpdated'); // Send update to all clients
+    io.emit('menuUpdated');
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// --- ORDER ---
+// --- ORDER CREATION ---
 app.post('/api/order', async (req,res) => {
   const { name,mobile,email,serviceType,address,items,lat,lng,formattedAddress } = req.body;
 
-  // UPDATED: enforce structured address if Delivery (REMOVED MOBILE VALIDATION)
+  // enforce structured address if Delivery
   if (serviceType === 'Delivery') {
-    const fields = ['flat','area','landmark','city','pincode']; // Mobile removed from validation
+    const fields = ['flat','area','landmark','city','pincode'];
     for (let f of fields) {
       if (!address[f] || address[f].toString().trim() === '') {
         return res.status(400).json({ error: `Missing delivery address field: ${f}` });
@@ -109,22 +113,18 @@ app.post('/api/order', async (req,res) => {
     }
   }
 
-  if (appSettings.cafeClosed)     return res.status(403).json({ error: appSettings.note });
+  if (appSettings.cafeClosed)                        return res.status(403).json({ error: appSettings.note });
   if (!appSettings.dineInEnabled && serviceType==='Dine-in')   return res.status(403).json({ error: appSettings.note });
   if (!appSettings.takeawayEnabled && serviceType==='Takeaway') return res.status(403).json({ error: appSettings.note });
   if (!appSettings.deliveryEnabled && serviceType==='Delivery') return res.status(403).json({ error: appSettings.note });
 
   const detailed = await Promise.all(items.map(async ({id,qty})=>{
     const m = await MenuItem.findById(id);
-    if (!m || !m.isAvailable) {
-      throw new Error(`Item ${m?.name || 'Unknown'} is not available`);
-    }
+    if (!m || !m.isAvailable) throw new Error(`Item ${m?.name || 'Unknown'} is not available`);
     return { id, name:m.name, price:m.price, qty };
   }));
- 
-  const baseTotal = detailed.reduce((s,i)=>s + i.price*i.qty, 0);
 
-  // calculate taxes & delivery fee
+  const baseTotal = detailed.reduce((s,i)=>s + i.price*i.qty, 0);
   const s = await Settings.findOne();
   const cgstAmt     = +(baseTotal * s.cgstPercent/100).toFixed(2);
   const sgstAmt     = +(baseTotal * s.sgstPercent/100).toFixed(2);
@@ -148,9 +148,15 @@ app.post('/api/order', async (req,res) => {
   }).save();
 
   io.emit('newOrder', order);
+
+  // 1) Order placed SMS
+  sendSMS(order.mobile,
+    `Hello ${name},Thank you for ordering from Millennials Cafe your Order ID is ${order._id}. Your Total Amount is ₹${order.total}. Status: ${order.status}. By Millennials cafe.`);
+
   res.status(201).json(order);
 });
 
+// --- FETCH ORDERS ---
 app.get('/api/myorders', async (req,res) => {
   const { mobile } = req.query;
   if (!mobile) return res.status(400).json({ error: 'Missing mobile' });
@@ -161,11 +167,12 @@ app.get('/api/orders', async (_,res) => {
   res.json(await Order.find().sort({ createdAt: -1 }));
 });
 
+// --- ORDER UPDATE + SMS ---
 app.post('/api/order/update', async (req,res) => {
   const { id, status, estimatedTime, cancellationNote } = req.body;
   const o = await Order.findById(id);
   if (!o) return res.status(404).json({ error: 'Order not found' });
- 
+
   if (estimatedTime != null) o.estimatedTime = +estimatedTime;
   if (status) {
     o.status = status;
@@ -179,6 +186,33 @@ app.post('/api/order/update', async (req,res) => {
   }
   await o.save();
   io.emit('orderUpdated', o);
+
+  // 2–8) Status‑based SMS
+  let msg;
+  const name = o.name;
+  const oid  = o._id;
+  switch(o.status) {
+    case 'Processing':
+      msg = `Hello ${name}, your order ${oid} is in ${o.status}. Estimated time is ${o.estimatedTime} mins, Thank you for yor patience. By Millennials cafe.`;
+      break;
+    case 'Ready':
+      msg = `Hello ${name}, your order ${oid} is ${o.status}. Please collect it from the counter. By Millennials cafe.`;
+      break;
+    case 'Ready for Pickup':
+      msg = `Hello ${name}, your order ${oid} is ${o.status}. By Millennials cafe.`;
+      break;
+    case 'Completed':
+      msg = `Hello ${name}, your order ${oid} is ${o.status}. Please provide your feedback in My Orders page, Order again-see you soon. By Millennials cafe.`;
+      break;
+    case 'Delivered':
+      msg = `Hello ${name}, your order ${oid} is ${o.status}. Please provide your feedback in My Orders page, Order again-see you soon. By Millennials cafe.`;
+      break;
+    case 'Cancelled':
+      msg = `Hello ${name}, your order ${oid} is ${o.status}. Please check cancellation reason in My Orders page. By Millennials cafe.`;
+      break;
+  }
+  if (msg) sendSMS(o.mobile, msg);
+
   res.json(o);
 });
 
@@ -212,15 +246,8 @@ app.post('/api/settings', async (req,res) => {
 // Socket connection handling
 io.on('connection', sock => {
   console.log('Socket connected:', sock.id);
- 
-  // Listen for client-triggered events
-  sock.on('menuUpdated', () => {
-    io.emit('menuUpdated');
-  });
- 
-  sock.on('settingsUpdated', () => {
-    io.emit('settingsUpdated');
-  });
+  sock.on('menuUpdated',     () => io.emit('menuUpdated'));
+  sock.on('settingsUpdated', () => io.emit('settingsUpdated'));
 });
 
 const PORT = process.env.PORT || 3001;
