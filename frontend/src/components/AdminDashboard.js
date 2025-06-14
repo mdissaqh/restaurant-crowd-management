@@ -18,7 +18,9 @@ import {
   FaSearch,
   FaTimes,
   FaEdit,
-  FaCheck
+  FaCheck,
+  FaToggleOn,
+  FaToggleOff
 } from 'react-icons/fa';
 
 export default function AdminDashboard() {
@@ -54,7 +56,7 @@ export default function AdminDashboard() {
   const [activeOrdersSearch, setActiveOrdersSearch] = useState('');
   const [completedOrdersSearch, setCompletedOrdersSearch] = useState('');
 
-  // NEW: Price editing state
+  // Price editing state
   const [editingPrices, setEditingPrices] = useState({});
   const [editPriceValues, setEditPriceValues] = useState({});
 
@@ -282,6 +284,10 @@ export default function AdminDashboard() {
     const fd = new FormData(e.target);
     const newCat = fd.get('newCategory').trim();
     fd.set('category', newCat || fd.get('existingCategory'));
+    
+    // Set availability to true by default (removed the toggle)
+    fd.set('isAvailable', 'true');
+    
     axios.post('http://localhost:3001/api/menu', fd)
       .then(() => {
         e.target.reset();
@@ -308,7 +314,7 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   }
 
-  // NEW: Price editing functions
+  // Price editing functions
   function startEditPrice(itemId, currentPrice) {
     setEditingPrices(prev => ({ ...prev, [itemId]: true }));
     setEditPriceValues(prev => ({ ...prev, [itemId]: currentPrice.toString() }));
@@ -329,7 +335,7 @@ export default function AdminDashboard() {
 
   function savePrice(itemId) {
     const newPrice = parseFloat(editPriceValues[itemId]);
-    
+   
     if (isNaN(newPrice) || newPrice <= 0) {
       alert('Please enter a valid price greater than 0');
       return;
@@ -347,6 +353,25 @@ export default function AdminDashboard() {
       .catch(error => {
         console.error('Error updating price:', error);
         alert('Failed to update price. Please try again.');
+      })
+      .finally(() => setLoading(false));
+  }
+
+  // Availability toggle function
+  function toggleAvailability(itemId, currentAvailability) {
+    if (!window.confirm(`Mark this item as ${currentAvailability ? 'Not Available' : 'Available'}?`)) return;
+    
+    setLoading(true);
+    axios.put(`http://localhost:3001/api/menu/${itemId}`, { isAvailable: !currentAvailability })
+      .then(() => {
+        fetchMenu();
+        if (socket) {
+          socket.emit('menuUpdated');
+        }
+      })
+      .catch(error => {
+        console.error('Error updating availability:', error);
+        alert('Failed to update availability. Please try again.');
       })
       .finally(() => setLoading(false));
   }
@@ -989,7 +1014,7 @@ export default function AdminDashboard() {
             </section>
           )}
 
-          {/* Enhanced Menu Management with Price Editing */}
+          {/* Clean Menu Management with Availability Toggle (No Image Overlays) */}
           {activeTab === 'menu' && (
             <section className="settings-container">
               <h3 className="mb-4"><FaUtensils className="me-2" />Menu Management</h3>
@@ -1010,7 +1035,7 @@ export default function AdminDashboard() {
                       <input name="price" type="number" step="0.01" placeholder="0.00" required className="form-control" />
                     </div>
                    
-                    <div className="col-md-3">
+                    <div className="col-md-2">
                       <label className="form-label">Existing Category</label>
                       <select name="existingCategory" className="form-select">
                         <option value="">Select category</option>
@@ -1018,19 +1043,19 @@ export default function AdminDashboard() {
                       </select>
                     </div>
                    
-                    <div className="col-md-3">
+                    <div className="col-md-2">
                       <label className="form-label">Or New Category</label>
                       <input name="newCategory" placeholder="Create new category" className="form-control" />
                     </div>
                    
-                    <div className="col-md-6">
+                    <div className="col-md-2">
                       <label className="form-label">Image</label>
                       <input name="image" type="file" className="form-control" />
                     </div>
                    
-                    <div className="col-md-6 d-flex align-items-end">
-                      <button type="submit" className="btn btn-primary ms-auto">
-                        Add Item
+                    <div className="col-12 d-flex justify-content-end">
+                      <button type="submit" className="btn btn-primary">
+                        Add Item (Available by Default)
                       </button>
                     </div>
                   </form>
@@ -1046,7 +1071,7 @@ export default function AdminDashboard() {
                     <div className="row">
                       {menu.filter(i=>i.category===cat).map(item => (
                         <div key={item._id} className="col-md-3 mb-3">
-                          <div className="card h-100" style={{ minHeight: '400px' }}>
+                          <div className={`card h-100 ${!item.isAvailable ? 'border-warning' : ''}`} style={{ minHeight: '450px' }}>
                             {item.image && (
                               <div className="position-relative" style={{
                                 minHeight: '200px',
@@ -1065,14 +1090,26 @@ export default function AdminDashboard() {
                                     maxWidth: '100%',
                                     maxHeight: '250px',
                                     objectFit: 'contain',
-                                    objectPosition: 'center'
+                                    objectPosition: 'center',
+                                    opacity: item.isAvailable ? 1 : 0.7
                                   }}
                                 />
                               </div>
                             )}
+                            
                             <div className="card-body d-flex flex-column">
-                              <h5 className="card-title">{item.name}</h5>
-                              
+                              <h5 className={`card-title ${!item.isAvailable ? 'text-muted' : ''}`}>{item.name}</h5>
+                             
+                              {/* Availability Status Badge (Instead of Image Overlay) */}
+                              {!item.isAvailable && (
+                                <div className="mb-2">
+                                  <span className="badge bg-warning text-dark">
+                                    <FaToggleOff className="me-1" />
+                                    Not Available
+                                  </span>
+                                </div>
+                              )}
+                             
                               {/* Price editing section */}
                               <div className="mb-3">
                                 {editingPrices[item._id] ? (
@@ -1106,7 +1143,9 @@ export default function AdminDashboard() {
                                   </div>
                                 ) : (
                                   <div className="d-flex align-items-center justify-content-between">
-                                    <span className="text-primary fw-bold">₹{item.price.toFixed(2)}</span>
+                                    <span className={`fw-bold ${!item.isAvailable ? 'text-muted' : 'text-primary'}`}>
+                                      ₹{item.price.toFixed(2)}
+                                    </span>
                                     <button
                                       className="btn btn-outline-primary btn-sm"
                                       onClick={() => startEditPrice(item._id, item.price)}
@@ -1116,6 +1155,30 @@ export default function AdminDashboard() {
                                     </button>
                                   </div>
                                 )}
+                              </div>
+
+                              {/* Availability Toggle */}
+                              <div className="mb-3">
+                                <div className="d-flex align-items-center justify-content-between">
+                                  <span className="fw-bold">Availability:</span>
+                                  <button
+                                    className={`btn btn-sm ${item.isAvailable ? 'btn-success' : 'btn-warning'}`}
+                                    onClick={() => toggleAvailability(item._id, item.isAvailable)}
+                                    disabled={loading}
+                                  >
+                                    {item.isAvailable ? (
+                                      <>
+                                        <FaToggleOn className="me-1" />
+                                        Available
+                                      </>
+                                    ) : (
+                                      <>
+                                        <FaToggleOff className="me-1" />
+                                        Not Available
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
                               </div>
 
                               <button
@@ -1356,7 +1419,7 @@ export default function AdminDashboard() {
                   />
                   {safeSettings.note && (
                     <div className="mt-3 alert alert-info">
-                      <strong>Current Note Preview:</strong>
+                      <strong>Note Preview:</strong>
                       <p className="mb-0 mt-2">"{safeSettings.note}"</p>
                     </div>
                   )}
@@ -1405,7 +1468,7 @@ export default function AdminDashboard() {
                
                 <div className="d-flex justify-content-end mt-4">
                   <button type="submit" className="btn btn-primary btn-lg">
-                    <FaSave className="me-2" /> Save Tax & Delivery Settings
+                    <FaSave className="me-2" /> Save Global Note,Tax & Delivery Settings
                   </button>
                 </div>
                

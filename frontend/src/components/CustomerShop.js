@@ -4,7 +4,7 @@ import axios from 'axios';
 import io from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import Cart from './Cart';
-import { FaSearch, FaShoppingCart, FaSignOutAlt, FaListAlt, FaTimes, FaSpinner } from 'react-icons/fa';
+import { FaSearch, FaShoppingCart, FaSignOutAlt, FaListAlt, FaTimes, FaSpinner, FaExclamationTriangle } from 'react-icons/fa';
 
 export default function CustomerShop() {
   const [menu, setMenu] = useState([]);
@@ -23,7 +23,8 @@ export default function CustomerShop() {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
   const [updateNotification, setUpdateNotification] = useState('');
-  
+  const [unavailableNotification, setUnavailableNotification] = useState('');
+ 
   // Image modal states
   const [modalImage, setModalImage] = useState(null);
   const [modalImageLoading, setModalImageLoading] = useState(false);
@@ -38,8 +39,10 @@ export default function CustomerShop() {
       const response = await axios.get('http://localhost:3001/api/menu');
       setMenu(response.data);
       setCategories([...new Set(response.data.map(i => i.category))]);
+      return response.data;
     } catch (error) {
       console.error('Error fetching menu:', error);
+      return [];
     }
   };
 
@@ -53,10 +56,42 @@ export default function CustomerShop() {
     }
   };
 
+  // Clean up cart when items become unavailable
+  const cleanupCart = (currentMenu) => {
+    const currentCart = JSON.parse(localStorage.getItem('cart') || '{}');
+    const cleanedCart = {};
+    let removedItems = [];
+
+    Object.entries(currentCart).forEach(([itemId, quantity]) => {
+      const menuItem = currentMenu.find(item => item._id === itemId);
+      
+      if (menuItem && menuItem.isAvailable !== false) {
+        // Item exists and is available - keep in cart
+        cleanedCart[itemId] = quantity;
+      } else if (menuItem && menuItem.isAvailable === false) {
+        // Item exists but is unavailable - remove from cart
+        removedItems.push(menuItem.name);
+      } else {
+        // Item doesn't exist anymore - remove from cart
+        removedItems.push('Unknown item');
+      }
+    });
+
+    if (removedItems.length > 0) {
+      setCart(cleanedCart);
+      localStorage.setItem('cart', JSON.stringify(cleanedCart));
+      showUnavailableNotification(`Removed unavailable items: ${removedItems.join(', ')}`);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
     Promise.all([fetchMenu(), fetchSettings()])
-      .then(() => setLoading(false))
+      .then(([menuData, settingsData]) => {
+        // Clean up cart with fresh menu data
+        cleanupCart(menuData);
+        setLoading(false);
+      })
       .catch(err => {
         console.error(err);
         setLoading(false);
@@ -69,8 +104,10 @@ export default function CustomerShop() {
     // Listen for real-time updates
     sock.on('menuUpdated', () => {
       console.log('Menu updated - refreshing menu data');
-      fetchMenu();
-      showUpdateNotification('Menu has been updated!');
+      fetchMenu().then(menuData => {
+        cleanupCart(menuData);
+        showUpdateNotification('Menu has been updated!');
+      });
     });
    
     sock.on('settingsUpdated', () => {
@@ -109,8 +146,17 @@ export default function CustomerShop() {
     }, 3000);
   };
 
+  // Show unavailable item notification
+  const showUnavailableNotification = (message) => {
+    setUnavailableNotification(message);
+    setTimeout(() => {
+      setUnavailableNotification('');
+    }, 5000);
+  };
+
   // Handle image click for modal view
-  const handleImageClick = (imageSrc, itemName) => {
+  const handleImageClick = (imageSrc, itemName, isAvailable) => {
+    if (!isAvailable) return; // Don't open modal for unavailable items
     setModalImageLoading(true);
     setModalImage({ src: imageSrc, alt: itemName });
   };
@@ -128,6 +174,14 @@ export default function CustomerShop() {
   };
 
   const inc = id => {
+    const item = menu.find(m => m._id === id);
+    
+    // Check if item is available before adding to cart
+    if (!item || item.isAvailable === false) {
+      showUnavailableNotification(`${item?.name || 'This item'} is currently not available`);
+      return;
+    }
+
     const u = { ...cart, [id]: (cart[id] || 0) + 1 };
     setCart(u);
     localStorage.setItem('cart', JSON.stringify(u));
@@ -149,16 +203,17 @@ export default function CustomerShop() {
   const goToCart = () => navigate('/cart');
   const goToOrders = () => navigate('/my-orders');
 
+  // Show ALL menu items (both available and unavailable)
   const filteredMenu = menu.filter(item =>
     (selectedCat === 'All' || item.category === selectedCat) &&
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
  
-  // Updated logic: Only show categories that have matching items when searching
+  // Show categories that have any items (available or unavailable) when searching
   const catsToRender = selectedCat === 'All'
     ? searchTerm.trim()
-      ? [...new Set(filteredMenu.map(item => item.category))] // Only categories with matching items when searching
-      : categories // All categories when no search term
+      ? [...new Set(filteredMenu.map(item => item.category))]
+      : categories
     : categories.includes(selectedCat)
       ? [selectedCat]
       : [];
@@ -195,25 +250,34 @@ export default function CustomerShop() {
         </div>
       )}
 
+      {/* Unavailable Item Notification */}
+      {unavailableNotification && (
+        <div className="alert alert-warning alert-dismissible fade show position-fixed"
+             style={{ top: '150px', right: '20px', zIndex: 1050, minWidth: '350px' }}>
+          <FaExclamationTriangle className="me-2" />
+          <strong>Notice!</strong> {unavailableNotification}
+        </div>
+      )}
+
       {/* Image Modal */}
       {modalImage && (
         <div className="image-modal-overlay" onClick={() => setModalImage(null)}>
           <div className="image-modal-container">
-            <button 
+            <button
               className="image-modal-close"
               onClick={() => setModalImage(null)}
               aria-label="Close modal"
             >
               <FaTimes />
             </button>
-            
+           
             {modalImageLoading && (
               <div className="image-modal-loading">
                 <FaSpinner className="spinner" />
                 <span>Loading image...</span>
               </div>
             )}
-            
+           
             <img
               src={modalImage.src}
               alt={modalImage.alt}
@@ -222,7 +286,7 @@ export default function CustomerShop() {
               onLoad={() => setModalImageLoading(false)}
               style={{ display: modalImageLoading ? 'none' : 'block' }}
             />
-            
+           
             <div className="image-modal-caption">
               {modalImage.alt}
             </div>
@@ -329,7 +393,7 @@ export default function CustomerShop() {
             <h3 className="mb-3">{cat}</h3>
             <div className="menu-grid-enhanced">
               {filteredMenu.filter(i => i.category === cat).map(item => (
-                <div key={item._id} className="card h-100 menu-item-card-enhanced">
+                <div key={item._id} className={`card h-100 menu-item-card-enhanced ${item.isAvailable === false ? 'unavailable-item-subtle' : ''}`}>
                   {item.image && (
                     <div className="menu-image-container">
                       {imageLoadingStates[item._id] && (
@@ -337,33 +401,61 @@ export default function CustomerShop() {
                           <FaSpinner className="spinner" />
                         </div>
                       )}
-                      
+                     
                       <img
                         src={`http://localhost:3001${item.image}`}
                         className="menu-item-image-enhanced"
                         alt={item.name}
                         onLoadStart={() => handleImageLoadStart(item._id)}
                         onLoad={() => handleImageLoad(item._id)}
-                        onClick={() => handleImageClick(`http://localhost:3001${item.image}`, item.name)}
+                        onClick={() => handleImageClick(`http://localhost:3001${item.image}`, item.name, item.isAvailable)}
+                        style={{ 
+                          cursor: item.isAvailable === false ? 'not-allowed' : 'pointer',
+                          opacity: item.isAvailable === false ? 0.6 : 1
+                        }}
                       />
                     </div>
                   )}
-                  
+                 
                   <div className="card-body d-flex flex-column">
-                    <h5 className="card-title">{item.name}</h5>
-                    <p className="card-text text-primary fw-bold">₹{item.price.toFixed(2)}</p>
+                    <h5 className={`card-title ${item.isAvailable === false ? 'text-muted' : ''}`}>
+                      {item.name}
+                    </h5>
+                    <p className={`card-text fw-bold ${item.isAvailable === false ? 'text-muted' : 'text-primary'}`}>
+                      ₹{item.price.toFixed(2)}
+                    </p>
+                    
+                    {/* Clean availability indicator without overlay */}
+                    {item.isAvailable === false && (
+                      <div className="alert alert-warning py-2 mb-2">
+                        <small><FaExclamationTriangle className="me-1" />Currently Unavailable</small>
+                      </div>
+                    )}
+                    
                     <div className="mt-auto">
                       <div className="quantity-controls">
                         <button
                           className="btn btn-outline-secondary quantity-btn"
                           onClick={() => dec(item._id)}
+                          disabled={item.isAvailable === false}
                         >–</button>
                         <span className="quantity-display">{cart[item._id] || 0}</span>
                         <button
                           className="btn btn-outline-secondary quantity-btn"
                           onClick={() => inc(item._id)}
+                          disabled={item.isAvailable === false}
+                          title={item.isAvailable === false ? 'Item not available' : 'Add to cart'}
                         >+</button>
                       </div>
+                      
+                      {item.isAvailable === false && (cart[item._id] || 0) > 0 && (
+                        <div className="text-center mt-2">
+                          <small className="text-danger">
+                            <FaExclamationTriangle className="me-1" />
+                            This item in your cart is no longer available
+                          </small>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -372,7 +464,7 @@ export default function CustomerShop() {
           </div>
         ))}
        
-        {/* No results message - Only show when no categories have matching items */}
+        {/* No results message */}
         {catsToRender.length === 0 && (
           <div className="alert alert-warning">
             <p className="mb-0">No items match your search. Try a different term or category.</p>
