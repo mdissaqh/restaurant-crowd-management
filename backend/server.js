@@ -48,24 +48,18 @@ app.post('/api/menu', upload.single('image'), async (req,res) => {
   res.status(201).json(doc);
 });
 
-// NEW: Update menu item price
+// NEW: Price update endpoint
 app.put('/api/menu/:id', async (req,res) => {
   try {
     const { price } = req.body;
-    if (!price || isNaN(price) || price <= 0) {
-      return res.status(400).json({ error: 'Invalid price' });
-    }
-    
     const updatedItem = await MenuItem.findByIdAndUpdate(
       req.params.id, 
       { price: +price }, 
       { new: true }
     );
-    
     if (!updatedItem) {
       return res.status(404).json({ error: 'Menu item not found' });
     }
-    
     io.emit('menuUpdated'); // Send update to all clients
     res.json(updatedItem);
   } catch (e) {

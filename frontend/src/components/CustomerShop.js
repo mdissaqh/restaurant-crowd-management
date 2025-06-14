@@ -20,53 +20,81 @@ export default function CustomerShop() {
     note: ''
   });
   const [loading, setLoading] = useState(true);
+  const [socket, setSocket] = useState(null);
+  const [updateNotification, setUpdateNotification] = useState('');
 
   const user = JSON.parse(localStorage.getItem('user'));
   const navigate = useNavigate();
 
+  // Fetch menu data
+  const fetchMenu = async () => {
+    try {
+      const response = await axios.get('http://localhost:3001/api/menu');
+      setMenu(response.data);
+      setCategories([...new Set(response.data.map(i => i.category))]);
+    } catch (error) {
+      console.error('Error fetching menu:', error);
+    }
+  };
+
+  // Fetch settings data
+  const fetchSettings = async () => {
+    try {
+      const response = await axios.get('http://localhost:3001/api/settings');
+      setSettings(response.data);
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([
-      axios.get('http://localhost:3001/api/menu'),
-      axios.get('http://localhost:3001/api/settings')
-    ]).then(([menuRes, settingsRes]) => {
-      setMenu(menuRes.data);
-      setCategories([...new Set(menuRes.data.map(i => i.category))]);
-      setSettings(settingsRes.data);
-      setLoading(false);
-    }).catch(err => {
-      console.error(err);
-      setLoading(false);
-    });
+    Promise.all([fetchMenu(), fetchSettings()])
+      .then(() => setLoading(false))
+      .catch(err => {
+        console.error(err);
+        setLoading(false);
+      });
 
+    // Initialize socket connection
     const sock = io('http://localhost:3001');
+    setSocket(sock);
     
-    // Listen for settings updates
-    sock.on('settingsUpdated', () => {
-      axios.get('http://localhost:3001/api/settings')
-        .then(r => setSettings(r.data))
-        .catch(console.error);
+    // Listen for real-time updates
+    sock.on('menuUpdated', () => {
+      console.log('Menu updated - refreshing menu data');
+      fetchMenu();
+      showUpdateNotification('Menu has been updated!');
     });
     
-    // Listen for menu updates
-    sock.on('menuUpdated', () => {
-      axios.get('http://localhost:3001/api/menu')
-        .then(r => {
-          setMenu(r.data);
-          setCategories([...new Set(r.data.map(i => i.category))]);
-        })
-        .catch(console.error);
+    sock.on('settingsUpdated', () => {
+      console.log('Settings updated - refreshing settings data');
+      fetchSettings();
+      showUpdateNotification('Store settings have been updated!');
     });
 
-    return () => sock.disconnect();
+    // Clean up socket connection
+    return () => {
+      if (sock) {
+        sock.disconnect();
+      }
+    };
   }, []);
+
+  // Show update notification
+  const showUpdateNotification = (message) => {
+    setUpdateNotification(message);
+    setTimeout(() => {
+      setUpdateNotification('');
+    }, 3000);
+  };
 
   const inc = id => {
     const u = { ...cart, [id]: (cart[id] || 0) + 1 };
     setCart(u);
     localStorage.setItem('cart', JSON.stringify(u));
   };
-  
+ 
   const dec = id => {
     const next = Math.max((cart[id] || 0) - 1, 0);
     const u = { ...cart, [id]: next };
@@ -75,11 +103,11 @@ export default function CustomerShop() {
     localStorage.setItem('cart', JSON.stringify(u));
   };
 
-  const logout = () => { 
-    localStorage.removeItem('user'); 
-    navigate('/login'); 
+  const logout = () => {
+    localStorage.removeItem('user');
+    navigate('/login');
   };
-  
+ 
   const goToCart = () => navigate('/cart');
   const goToOrders = () => navigate('/my-orders');
 
@@ -87,10 +115,10 @@ export default function CustomerShop() {
     (selectedCat === 'All' || item.category === selectedCat) &&
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  
+ 
   // Updated logic: Only show categories that have matching items when searching
   const catsToRender = selectedCat === 'All'
-    ? searchTerm.trim() 
+    ? searchTerm.trim()
       ? [...new Set(filteredMenu.map(item => item.category))] // Only categories with matching items when searching
       : categories // All categories when no search term
     : categories.includes(selectedCat)
@@ -121,6 +149,14 @@ export default function CustomerShop() {
         <h1 className="mb-0">MILLENNIALS CAFE</h1>
       </header>
 
+      {/* Real-time Update Notification */}
+      {updateNotification && (
+        <div className="alert alert-success alert-dismissible fade show position-fixed" 
+             style={{ top: '100px', right: '20px', zIndex: 1050, minWidth: '300px' }}>
+          <strong>Update!</strong> {updateNotification}
+        </div>
+      )}
+
       <div className="container py-4 position-relative">
         {/* Top Controls */}
         <div className="card mb-4">
@@ -128,14 +164,14 @@ export default function CustomerShop() {
             <div className="d-flex justify-content-between align-items-center">
               <h2 className="mb-0">Welcome, {user.name}</h2>
               <div className="d-flex gap-2">
-                <button 
-                  className="btn btn-outline-danger" 
+                <button
+                  className="btn btn-outline-danger"
                   onClick={logout}
                 >
                   <FaSignOutAlt className="me-2" /> Logout
                 </button>
-                <button 
-                  className="btn btn-outline-primary" 
+                <button
+                  className="btn btn-outline-primary"
                   onClick={goToOrders}
                 >
                   <FaListAlt className="me-2" /> My Orders
@@ -193,7 +229,7 @@ export default function CustomerShop() {
                   ))}
                 </div>
               </div>
-              
+             
               <div className="col-md-6">
                 <label htmlFor="searchItems" className="form-label">Search</label>
                 <div className="input-group">
@@ -250,7 +286,7 @@ export default function CustomerShop() {
             </div>
           </div>
         ))}
-        
+       
         {/* No results message - Only show when no categories have matching items */}
         {catsToRender.length === 0 && (
           <div className="alert alert-warning">
