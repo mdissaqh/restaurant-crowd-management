@@ -39,54 +39,47 @@ export default function AdminDashboard() {
   const [feedbackStats, setFeedbackStats] = useState({ overall: 0, week: 0, month: 0, year: 0, count: 0 });
   const [loading, setLoading] = useState(false);
   const [savingSuccess, setSavingSuccess] = useState(false);
+  const [socket, setSocket] = useState(null);
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     fetchMenu();
     fetchOrders();
-    axios.get('http://localhost:3001/api/settings')
-      .then(r => {
-        // Ensure we always have a valid settings object
-        const validSettings = {
-          dineInEnabled: true,
-          takeawayEnabled: true,
-          deliveryEnabled: true,
-          cafeClosed: false,
-          showNotes: false,
-          note: '',
-          cgstPercent: 0,
-          sgstPercent: 0,
-          deliveryCharge: 0,
-          ...r.data // Spread the API response to override defaults
-        };
-        setSettings(validSettings);
-      })
-      .catch(console.error);
-    
+    fetchSettings();
+   
     const sock = io('http://localhost:3001');
+    setSocket(sock);
+    
     sock.on('newOrder', fetchOrders);
     sock.on('orderUpdated', fetchOrders);
-    sock.on('settingsUpdated', s => {
-      // Ensure we always have a valid settings object
-      const validSettings = {
-        dineInEnabled: true,
-        takeawayEnabled: true,
-        deliveryEnabled: true,
-        cafeClosed: false,
-        showNotes: false,
-        note: '',
-        cgstPercent: 0,
-        sgstPercent: 0,
-        deliveryCharge: 0,
-        ...s // Spread the socket response to override defaults
-      };
-      setSettings(validSettings);
+    sock.on('settingsUpdated', (updatedSettings) => {
+      console.log('Settings updated via socket:', updatedSettings);
+      setSettings(prevSettings => ({
+        ...prevSettings,
+        ...updatedSettings
+      }));
     });
-    return () => sock.disconnect();
+    
+    return () => {
+      sock.disconnect();
+    };
   }, []);
 
   // --- Fetchers ---
+  function fetchSettings() {
+    axios.get('http://localhost:3001/api/settings')
+      .then(r => {
+        console.log('Fetched settings:', r.data);
+        const fetchedSettings = r.data || {};
+        setSettings(prevSettings => ({
+          ...prevSettings,
+          ...fetchedSettings
+        }));
+      })
+      .catch(console.error);
+  }
+
   function fetchMenu() {
     setLoading(true);
     axios.get('http://localhost:3001/api/menu')
@@ -213,12 +206,12 @@ export default function AdminDashboard() {
     const newCat = fd.get('newCategory').trim();
     fd.set('category', newCat || fd.get('existingCategory'));
     axios.post('http://localhost:3001/api/menu', fd)
-      .then(() => { 
-        e.target.reset(); 
+      .then(() => {
+        e.target.reset();
         fetchMenu();
-        // Notify the client to refresh
-        const sock = io('http://localhost:3001');
-        sock.emit('menuUpdated');
+        if (socket) {
+          socket.emit('menuUpdated');
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -230,9 +223,9 @@ export default function AdminDashboard() {
     axios.delete(`http://localhost:3001/api/menu/${id}`)
       .then(() => {
         fetchMenu();
-        // Notify the client to refresh
-        const sock = io('http://localhost:3001');
-        sock.emit('menuUpdated');
+        if (socket) {
+          socket.emit('menuUpdated');
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -272,20 +265,36 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   }
 
+  // Updated function to immediately save settings when toggles are changed
+  function updateSettingImmediate(key, value) {
+    console.log(`Updating setting ${key} to ${value}`);
+    
+    // Update local state immediately for responsive UI
+    const updatedSettings = { ...settings, [key]: value };
+    setSettings(updatedSettings);
+    
+    // Save to server immediately
+    axios.post('http://localhost:3001/api/settings', updatedSettings)
+      .then(r => {
+        console.log('Settings saved successfully:', r.data);
+        setSettings(r.data);
+        
+        // Notify clients via socket
+        if (socket) {
+          socket.emit('settingsUpdated');
+        }
+      })
+      .catch(error => {
+        console.error('Failed to save settings:', error);
+        // Revert local state on error
+        fetchSettings();
+        alert('Failed to save settings. Please try again.');
+      });
+  }
+
+  // Updated function for form input changes (not toggles)
   function updateSetting(key, value) {
-    // Ensure settings is always an object before updating
-    const currentSettings = settings || {
-      dineInEnabled: true,
-      takeawayEnabled: true,
-      deliveryEnabled: true,
-      cafeClosed: false,
-      showNotes: false,
-      note: '',
-      cgstPercent: 0,
-      sgstPercent: 0,
-      deliveryCharge: 0
-    };
-    const updatedSettings = { ...currentSettings, [key]: value };
+    const updatedSettings = { ...settings, [key]: value };
     setSettings(updatedSettings);
   }
 
@@ -297,10 +306,10 @@ export default function AdminDashboard() {
         setSettings(r.data);
         setSavingSuccess(true);
         setTimeout(() => setSavingSuccess(false), 3000);
-        
-        // Notify the client to refresh
-        const sock = io('http://localhost:3001');
-        sock.emit('settingsUpdated');
+       
+        if (socket) {
+          socket.emit('settingsUpdated');
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -330,7 +339,7 @@ export default function AdminDashboard() {
     return `status-badge ${statusMap[status] || ''}`;
   }
 
-  // Ensure settings is always an object to prevent undefined errors
+  // Ensure settings is always a valid object - this prevents the undefined error
   const safeSettings = settings || {
     dineInEnabled: true,
     takeawayEnabled: true,
@@ -392,7 +401,7 @@ export default function AdminDashboard() {
           {activeTab === 'earnings' && (
             <section className="settings-container">
               <h3 className="mb-4"><FaChartBar className="me-2" />Earnings Dashboard</h3>
-              
+             
               <div className="row mb-4">
                 <div className="col-md-3">
                   <div className="card bg-light">
@@ -452,8 +461,8 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div className="col-md-4">
-                    <button 
-                      className="btn btn-primary w-100" 
+                    <button
+                      className="btn btn-primary w-100"
                       onClick={() => calcRange(orders)}
                       disabled={!rangeStart || !rangeEnd}
                     >
@@ -461,7 +470,7 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                 </div>
-                
+               
                 {rangeStart && rangeEnd && (
                   <div className="mt-4 alert alert-success">
                     <h5 className="mb-0">Total from {rangeStart} to {rangeEnd}: <strong>₹{rangeTotal.toFixed(2)}</strong></h5>
@@ -501,13 +510,13 @@ export default function AdminDashboard() {
                               <div className="mb-3">
                                 <strong>Service Type:</strong> {o.serviceType}
                               </div>
-                              
+                             
                               {o.serviceType === 'Delivery' && (
                                 <div className="mb-3">
                                   <strong>Address:</strong> {renderAddress(o.address)}
                                 </div>
                               )}
-                              
+                             
                               <div className="card mb-3">
                                 <div className="card-header">
                                   <strong>Order Items</strong>
@@ -521,7 +530,7 @@ export default function AdminDashboard() {
                                   ))}
                                 </ul>
                               </div>
-                              
+                             
                               <div className="row mb-3">
                                 <div className="col-6">
                                   <strong>Subtotal:</strong> ₹{subtotal.toFixed(2)}
@@ -541,7 +550,7 @@ export default function AdminDashboard() {
                                   <h5>Total: ₹{o.total.toFixed(2)}</h5>
                                 </div>
                               </div>
-                              
+                             
                               {o.estimatedTime && (
                                 <div className="alert alert-info mb-3">
                                   Estimated Time: {o.estimatedTime} minutes
@@ -549,12 +558,12 @@ export default function AdminDashboard() {
                               )}
                             </div>
                             <div className="card-footer d-flex justify-content-between">
-                              <button 
-                                className="btn btn-primary" 
+                              <button
+                                className="btn btn-primary"
                                 onClick={() => updateStatus(o)}
                               >
-                                Move to {o.serviceType !== 'Delivery' 
-                                  ? ['Pending', 'In Progress', 'Ready', 'Completed'] 
+                                Move to {o.serviceType !== 'Delivery'
+                                  ? ['Pending', 'In Progress', 'Ready', 'Completed']
                                   : ['Pending', 'In Progress', 'Ready for Pickup', 'Out for Delivery', 'Delivered']
                                 }[['Pending', 'In Progress', 'Ready', 'Ready for Pickup', 'Out for Delivery'].indexOf(o.status) + 1]
                               </button>
@@ -579,7 +588,7 @@ export default function AdminDashboard() {
                 if (!completedOrders.length) {
                   return <div className="alert alert-info">No completed or cancelled orders yet.</div>;
                 }
-                
+               
                 return (
                   <div className="row">
                     {completedOrders.map(o => (
@@ -598,7 +607,7 @@ export default function AdminDashboard() {
                                 <strong>Mobile:</strong> {o.mobile}
                               </div>
                             </div>
-                            
+                           
                             <div className="row mb-3">
                               <div className="col-md-6">
                                 <strong>Placed:</strong> {formatDate(o.createdAt)} {new Date(o.createdAt).toLocaleTimeString()}
@@ -607,17 +616,17 @@ export default function AdminDashboard() {
                                 <strong>Completed:</strong> {o.completedAt ? `${formatDate(o.completedAt)} ${new Date(o.completedAt).toLocaleTimeString()}` : '—'}
                               </div>
                             </div>
-                            
+                           
                             <div className="mb-3">
                               <strong>Service Type:</strong> {o.serviceType}
                             </div>
-                            
+                           
                             {o.address && (
                               <div className="mb-3">
                                 <strong>Address:</strong> {renderAddress(o.address)}
                               </div>
                             )}
-                            
+                           
                             <div className="card mb-3">
                               <div className="card-header">
                                 <strong>Order Items</strong>
@@ -631,7 +640,7 @@ export default function AdminDashboard() {
                                 ))}
                               </ul>
                             </div>
-                            
+                           
                             <div className="row mb-3">
                               <div className="col-6">
                                 <strong>Subtotal:</strong> ₹{o.items.reduce((s,i)=>s+i.price*i.qty,0).toFixed(2)}
@@ -651,13 +660,13 @@ export default function AdminDashboard() {
                                 <h5>Total: ₹{o.total.toFixed(2)}</h5>
                               </div>
                             </div>
-                            
+                           
                             {o.status==='Cancelled' && o.cancellationNote && (
                               <div className="alert alert-danger">
                                 <strong>Cancellation Reason:</strong> {o.cancellationNote}
                               </div>
                             )}
-                            
+                           
                             {o.rating != null && (
                               <div className="card mt-3">
                                 <div className="card-header">Customer Feedback</div>
@@ -688,7 +697,7 @@ export default function AdminDashboard() {
           {activeTab === 'menu' && (
             <section className="settings-container">
               <h3 className="mb-4"><FaUtensils className="me-2" />Menu Management</h3>
-              
+             
               <div className="card mb-4">
                 <div className="card-header">
                   <h5 className="mb-0">Add New Menu Item</h5>
@@ -699,12 +708,12 @@ export default function AdminDashboard() {
                       <label className="form-label">Item Name</label>
                       <input name="name" placeholder="Enter item name" required className="form-control" />
                     </div>
-                    
+                   
                     <div className="col-md-2">
                       <label className="form-label">Price (₹)</label>
                       <input name="price" type="number" step="0.01" placeholder="0.00" required className="form-control" />
                     </div>
-                    
+                   
                     <div className="col-md-3">
                       <label className="form-label">Existing Category</label>
                       <select name="existingCategory" className="form-select">
@@ -712,17 +721,17 @@ export default function AdminDashboard() {
                         {categories.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
-                    
+                   
                     <div className="col-md-3">
                       <label className="form-label">Or New Category</label>
                       <input name="newCategory" placeholder="Create new category" className="form-control" />
                     </div>
-                    
+                   
                     <div className="col-md-6">
                       <label className="form-label">Image</label>
                       <input name="image" type="file" className="form-control" />
                     </div>
-                    
+                   
                     <div className="col-md-6 d-flex align-items-end">
                       <button type="submit" className="btn btn-primary ms-auto">
                         Add Item
@@ -731,7 +740,7 @@ export default function AdminDashboard() {
                   </form>
                 </div>
               </div>
-              
+             
               {categories.map(cat => (
                 <div key={cat} className="card mb-4">
                   <div className="card-header">
@@ -762,7 +771,7 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       ))}
-                      
+                     
                       {menu.filter(i=>i.category===cat).length===0 && (
                         <div className="col-12">
                           <p className="text-muted">No items in this category.</p>
@@ -779,7 +788,7 @@ export default function AdminDashboard() {
           {activeTab === 'feedback' && (
             <section className="settings-container">
               <h3 className="mb-4"><FaStar className="me-2" />Feedback & Ratings</h3>
-              
+             
               <div className="card mb-4">
                 <div className="card-header">
                   <h5 className="mb-0">Rating Summary</h5>
@@ -802,7 +811,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </div>
-                    
+                   
                     <div className="col-md-3">
                       <div className="card bg-light mb-3">
                         <div className="card-body">
@@ -818,7 +827,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </div>
-                    
+                   
                     <div className="col-md-3">
                       <div className="card bg-light mb-3">
                         <div className="card-body">
@@ -834,7 +843,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </div>
-                    
+                   
                     <div className="col-md-3">
                       <div className="card bg-light mb-3">
                         <div className="card-body">
@@ -853,7 +862,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
-              
+             
               <div className="card">
                 <div className="card-header">
                   <h5 className="mb-0">Customer Feedback</h5>
@@ -878,11 +887,11 @@ export default function AdminDashboard() {
                                 {'★'.repeat(o.rating)}{'☆'.repeat(5-o.rating)}
                               </div>
                             </div>
-                            
+                           
                             {o.feedback && (
                               <p className="mb-2 mt-3 font-italic">"{o.feedback}"</p>
                             )}
-                            
+                           
                             <div className="d-flex justify-content-between text-muted">
                               <small>Order #{o._id.slice(-6)}</small>
                               <small>{o.serviceType}</small>
@@ -900,33 +909,55 @@ export default function AdminDashboard() {
           {activeTab === 'settings' && (
             <section className="settings-container">
               <h3 className="mb-4"><FaCog className="me-2" />Settings</h3>
-              
+             
               <form onSubmit={saveSettings}>
                 <div className="settings-section">
                   <h4>Service Availability</h4>
                   <div className="row g-3 mb-3">
-                    {[
-                      { id: 'dineIn', label: 'Dine-In' },
-                      { id: 'takeaway', label: 'Takeaway' },
-                      { id: 'delivery', label: 'Delivery' }
-                    ].map(service => (
-                      <div className="col-md-4" key={service.id}>
-                        <div className="form-check form-switch">
-                          <input
-                            id={`${service.id}Toggle`}
-                            type="checkbox"
-                            className="form-check-input"
-                            checked={safeSettings[`${service.id}Enabled`] || false}
-                            onChange={e => updateSetting(`${service.id}Enabled`, e.target.checked)}
-                          />
-                          <label htmlFor={`${service.id}Toggle`} className="form-check-label">
-                            Enable {service.label}
-                          </label>
-                        </div>
+                    <div className="col-md-4">
+                      <div className="form-check form-switch">
+                        <input
+                          id="dineInEnabledToggle"
+                          type="checkbox"
+                          className="form-check-input"
+                          checked={safeSettings.dineInEnabled || false}
+                          onChange={e => updateSettingImmediate('dineInEnabled', e.target.checked)}
+                        />
+                        <label htmlFor="dineInEnabledToggle" className="form-check-label">
+                          Enable Dine-In
+                        </label>
                       </div>
-                    ))}
+                    </div>
+                    <div className="col-md-4">
+                      <div className="form-check form-switch">
+                        <input
+                          id="takeawayEnabledToggle"
+                          type="checkbox"
+                          className="form-check-input"
+                          checked={safeSettings.takeawayEnabled || false}
+                          onChange={e => updateSettingImmediate('takeawayEnabled', e.target.checked)}
+                        />
+                        <label htmlFor="takeawayEnabledToggle" className="form-check-label">
+                          Enable Takeaway
+                        </label>
+                      </div>
+                    </div>
+                    <div className="col-md-4">
+                      <div className="form-check form-switch">
+                        <input
+                          id="deliveryEnabledToggle"
+                          type="checkbox"
+                          className="form-check-input"
+                          checked={safeSettings.deliveryEnabled || false}
+                          onChange={e => updateSettingImmediate('deliveryEnabled', e.target.checked)}
+                        />
+                        <label htmlFor="deliveryEnabledToggle" className="form-check-label">
+                          Enable Delivery
+                        </label>
+                      </div>
+                    </div>
                   </div>
-                  
+                 
                   <div className="row g-3">
                     <div className="col-md-6">
                       <div className="form-check form-switch">
@@ -935,12 +966,12 @@ export default function AdminDashboard() {
                           type="checkbox"
                           className="form-check-input"
                           checked={safeSettings.cafeClosed || false}
-                          onChange={e => updateSetting('cafeClosed', e.target.checked)}
+                          onChange={e => updateSettingImmediate('cafeClosed', e.target.checked)}
                         />
                         <label htmlFor="cafeClosedToggle" className="form-check-label">Cafe Closed</label>
                       </div>
                     </div>
-                    
+                   
                     <div className="col-md-6">
                       <div className="form-check form-switch">
                         <input
@@ -948,14 +979,14 @@ export default function AdminDashboard() {
                           type="checkbox"
                           className="form-check-input"
                           checked={safeSettings.showNotes || false}
-                          onChange={e => updateSetting('showNotes', e.target.checked)}
+                          onChange={e => updateSettingImmediate('showNotes', e.target.checked)}
                         />
                         <label htmlFor="showNotesToggle" className="form-check-label">Show Customer Notes</label>
                       </div>
                     </div>
                   </div>
                 </div>
-                
+               
                 <div className="settings-section">
                   <h4>Global Note</h4>
                   <textarea
@@ -965,8 +996,14 @@ export default function AdminDashboard() {
                     onChange={e => updateSetting('note', e.target.value)}
                     placeholder="Enter note to display to customers (especially when cafe is closed)"
                   />
+                  {safeSettings.note && (
+                    <div className="mt-3 alert alert-info">
+                      <strong>Note Preview:</strong>
+                      <p className="mb-0 mt-2">"{safeSettings.note}"</p>
+                    </div>
+                  )}
                 </div>
-                
+               
                 <div className="settings-section">
                   <h4>Tax & Delivery Settings</h4>
                   <div className="row g-3">
@@ -981,7 +1018,7 @@ export default function AdminDashboard() {
                         onChange={e => updateSetting('cgstPercent', +e.target.value)}
                       />
                     </div>
-                    
+                   
                     <div className="col-md-4">
                       <label className="form-label">SGST (%)</label>
                       <input
@@ -993,7 +1030,7 @@ export default function AdminDashboard() {
                         onChange={e => updateSetting('sgstPercent', +e.target.value)}
                       />
                     </div>
-                    
+                   
                     <div className="col-md-4">
                       <label className="form-label">Delivery Charge (₹)</label>
                       <input
@@ -1007,13 +1044,13 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 </div>
-                
+               
                 <div className="d-flex justify-content-end mt-4">
                   <button type="submit" className="btn btn-primary btn-lg">
-                    <FaSave className="me-2" /> Save All Settings
+                    <FaSave className="me-2" /> Save Global Note, Tax & Delivery Settings
                   </button>
                 </div>
-                
+               
                 {savingSuccess && (
                   <div className="alert alert-success mt-3 fade-in-up">
                     <strong>Success!</strong> Your settings have been saved.
@@ -1022,7 +1059,6 @@ export default function AdminDashboard() {
               </form>
             </section>
           )}
-
         </div>
       </div>
     </>
