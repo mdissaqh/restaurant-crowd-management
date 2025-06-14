@@ -315,6 +315,16 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   }
 
+  // Helper function to get the next status for display
+  function getNextStatus(order) {
+    const flow = order.serviceType !== 'Delivery'
+      ? ['Pending', 'In Progress', 'Ready', 'Completed']
+      : ['Pending', 'In Progress', 'Ready for Pickup', 'Out for Delivery', 'Delivered'];
+    const currentIndex = flow.indexOf(order.status);
+    if (currentIndex < 0 || currentIndex === flow.length - 1) return null;
+    return flow[currentIndex + 1];
+  }
+
   // parse JSON address
   const renderAddress = addr => {
     try {
@@ -493,6 +503,7 @@ export default function AdminDashboard() {
                   <div className="row">
                     {activeOrders.map(o => {
                       const subtotal = o.items.reduce((sum, i) => sum + i.price * i.qty, 0);
+                      const nextStatus = getNextStatus(o);
                       return (
                         <div key={o._id} className="col-lg-6 mb-4">
                           <div className="card h-100">
@@ -558,15 +569,16 @@ export default function AdminDashboard() {
                               )}
                             </div>
                             <div className="card-footer d-flex justify-content-between">
-                              <button
-                                className="btn btn-primary"
-                                onClick={() => updateStatus(o)}
-                              >
-                                Move to {o.serviceType !== 'Delivery'
-                                  ? ['Pending', 'In Progress', 'Ready', 'Completed']
-                                  : ['Pending', 'In Progress', 'Ready for Pickup', 'Out for Delivery', 'Delivered']
-                                }[['Pending', 'In Progress', 'Ready', 'Ready for Pickup', 'Out for Delivery'].indexOf(o.status) + 1]
-                              </button>
+                              {nextStatus ? (
+                                <button
+                                  className="btn btn-primary"
+                                  onClick={() => updateStatus(o)}
+                                >
+                                  Move to {nextStatus}
+                                </button>
+                              ) : (
+                                <span className="text-muted">Order Complete</span>
+                              )}
                               <button className="btn btn-danger" onClick={() => cancelOrder(o)}>Cancel</button>
                             </div>
                           </div>
@@ -998,7 +1010,7 @@ export default function AdminDashboard() {
                   />
                   {safeSettings.note && (
                     <div className="mt-3 alert alert-info">
-                      <strong>Note Preview:</strong>
+                      <strong>Current Note Preview:</strong>
                       <p className="mb-0 mt-2">"{safeSettings.note}"</p>
                     </div>
                   )}
@@ -1047,7 +1059,7 @@ export default function AdminDashboard() {
                
                 <div className="d-flex justify-content-end mt-4">
                   <button type="submit" className="btn btn-primary btn-lg">
-                    <FaSave className="me-2" /> Save Global Note, Tax & Delivery Settings
+                    <FaSave className="me-2" /> Save Tax & Delivery Settings
                   </button>
                 </div>
                
