@@ -46,12 +46,43 @@ export default function AdminDashboard() {
     fetchMenu();
     fetchOrders();
     axios.get('http://localhost:3001/api/settings')
-      .then(r => setSettings(r.data))
+      .then(r => {
+        // Ensure we always have a valid settings object
+        const validSettings = {
+          dineInEnabled: true,
+          takeawayEnabled: true,
+          deliveryEnabled: true,
+          cafeClosed: false,
+          showNotes: false,
+          note: '',
+          cgstPercent: 0,
+          sgstPercent: 0,
+          deliveryCharge: 0,
+          ...r.data // Spread the API response to override defaults
+        };
+        setSettings(validSettings);
+      })
       .catch(console.error);
+    
     const sock = io('http://localhost:3001');
     sock.on('newOrder', fetchOrders);
     sock.on('orderUpdated', fetchOrders);
-    sock.on('settingsUpdated', s => setSettings(s));
+    sock.on('settingsUpdated', s => {
+      // Ensure we always have a valid settings object
+      const validSettings = {
+        dineInEnabled: true,
+        takeawayEnabled: true,
+        deliveryEnabled: true,
+        cafeClosed: false,
+        showNotes: false,
+        note: '',
+        cgstPercent: 0,
+        sgstPercent: 0,
+        deliveryCharge: 0,
+        ...s // Spread the socket response to override defaults
+      };
+      setSettings(validSettings);
+    });
     return () => sock.disconnect();
   }, []);
 
@@ -242,7 +273,19 @@ export default function AdminDashboard() {
   }
 
   function updateSetting(key, value) {
-    const updatedSettings = { ...settings, [key]: value };
+    // Ensure settings is always an object before updating
+    const currentSettings = settings || {
+      dineInEnabled: true,
+      takeawayEnabled: true,
+      deliveryEnabled: true,
+      cafeClosed: false,
+      showNotes: false,
+      note: '',
+      cgstPercent: 0,
+      sgstPercent: 0,
+      deliveryCharge: 0
+    };
+    const updatedSettings = { ...currentSettings, [key]: value };
     setSettings(updatedSettings);
   }
 
@@ -286,6 +329,19 @@ export default function AdminDashboard() {
     };
     return `status-badge ${statusMap[status] || ''}`;
   }
+
+  // Ensure settings is always an object to prevent undefined errors
+  const safeSettings = settings || {
+    dineInEnabled: true,
+    takeawayEnabled: true,
+    deliveryEnabled: true,
+    cafeClosed: false,
+    showNotes: false,
+    note: '',
+    cgstPercent: 0,
+    sgstPercent: 0,
+    deliveryCharge: 0
+  };
 
   return (
     <>
@@ -471,10 +527,10 @@ export default function AdminDashboard() {
                                   <strong>Subtotal:</strong> ₹{subtotal.toFixed(2)}
                                 </div>
                                 <div className="col-6">
-                                  <strong>CGST ({settings.cgstPercent}%):</strong> ₹{(o.cgstAmount||0).toFixed(2)}
+                                  <strong>CGST ({safeSettings.cgstPercent}%):</strong> ₹{(o.cgstAmount||0).toFixed(2)}
                                 </div>
                                 <div className="col-6">
-                                  <strong>SGST ({settings.sgstPercent}%):</strong> ₹{(o.sgstAmount||0).toFixed(2)}
+                                  <strong>SGST ({safeSettings.sgstPercent}%):</strong> ₹{(o.sgstAmount||0).toFixed(2)}
                                 </div>
                                 {o.serviceType === 'Delivery' && (
                                   <div className="col-6">
@@ -860,7 +916,7 @@ export default function AdminDashboard() {
                             id={`${service.id}Toggle`}
                             type="checkbox"
                             className="form-check-input"
-                            checked={settings[`${service.id}Enabled`]}
+                            checked={safeSettings[`${service.id}Enabled`] || false}
                             onChange={e => updateSetting(`${service.id}Enabled`, e.target.checked)}
                           />
                           <label htmlFor={`${service.id}Toggle`} className="form-check-label">
@@ -878,7 +934,7 @@ export default function AdminDashboard() {
                           id="cafeClosedToggle"
                           type="checkbox"
                           className="form-check-input"
-                          checked={settings.cafeClosed}
+                          checked={safeSettings.cafeClosed || false}
                           onChange={e => updateSetting('cafeClosed', e.target.checked)}
                         />
                         <label htmlFor="cafeClosedToggle" className="form-check-label">Cafe Closed</label>
@@ -891,7 +947,7 @@ export default function AdminDashboard() {
                           id="showNotesToggle"
                           type="checkbox"
                           className="form-check-input"
-                          checked={settings.showNotes}
+                          checked={safeSettings.showNotes || false}
                           onChange={e => updateSetting('showNotes', e.target.checked)}
                         />
                         <label htmlFor="showNotesToggle" className="form-check-label">Show Customer Notes</label>
@@ -905,7 +961,7 @@ export default function AdminDashboard() {
                   <textarea
                     className="form-control"
                     rows={3}
-                    value={settings.note}
+                    value={safeSettings.note || ''}
                     onChange={e => updateSetting('note', e.target.value)}
                     placeholder="Enter note to display to customers (especially when cafe is closed)"
                   />
@@ -921,7 +977,7 @@ export default function AdminDashboard() {
                         min="0"
                         step="0.1"
                         className="form-control"
-                        value={settings.cgstPercent}
+                        value={safeSettings.cgstPercent || 0}
                         onChange={e => updateSetting('cgstPercent', +e.target.value)}
                       />
                     </div>
@@ -933,7 +989,7 @@ export default function AdminDashboard() {
                         min="0"
                         step="0.1"
                         className="form-control"
-                        value={settings.sgstPercent}
+                        value={safeSettings.sgstPercent || 0}
                         onChange={e => updateSetting('sgstPercent', +e.target.value)}
                       />
                     </div>
@@ -945,7 +1001,7 @@ export default function AdminDashboard() {
                         min="0"
                         step="0.1"
                         className="form-control"
-                        value={settings.deliveryCharge}
+                        value={safeSettings.deliveryCharge || 0}
                         onChange={e => updateSetting('deliveryCharge', +e.target.value)}
                       />
                     </div>
