@@ -1,3 +1,4 @@
+// frontend/src/components/CartPage.js
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import io from 'socket.io-client';
@@ -27,6 +28,7 @@ export default function CartPage() {
   const [submitting, setSubmitting] = useState(false);
   const [socket, setSocket] = useState(null);
   const [updateNotification, setUpdateNotification] = useState('');
+  const [addressErrors, setAddressErrors] = useState({});
 
   const user = JSON.parse(localStorage.getItem('user'));
   const navigate = useNavigate();
@@ -85,6 +87,56 @@ export default function CartPage() {
     }
   };
 
+  // Validate address fields
+  const validateAddressField = (field, value) => {
+    const errors = { ...addressErrors };
+    
+    switch (field) {
+      case 'mobile':
+        if (!value.trim()) {
+          errors[field] = 'Mobile number is required';
+        } else if (!/^\d{10}$/.test(value)) {
+          errors[field] = 'Mobile number must be exactly 10 digits';
+        } else {
+          delete errors[field];
+        }
+        break;
+      case 'pincode':
+        if (!value.trim()) {
+          errors[field] = 'Pincode is required';
+        } else if (!/^\d{6}$/.test(value)) {
+          errors[field] = 'Pincode must be exactly 6 digits';
+        } else {
+          delete errors[field];
+        }
+        break;
+      default:
+        if (!value.trim()) {
+          errors[field] = `${field.charAt(0).toUpperCase() + field.slice(1)} is required`;
+        } else {
+          delete errors[field];
+        }
+        break;
+    }
+    
+    setAddressErrors(errors);
+  };
+
+  // Handle address field changes
+  const handleAddressChange = (field, value) => {
+    let filteredValue = value;
+    
+    // Special filtering for numeric fields
+    if (field === 'mobile') {
+      filteredValue = value.replace(/\D/g, '').slice(0, 10);
+    } else if (field === 'pincode') {
+      filteredValue = value.replace(/\D/g, '').slice(0, 6);
+    }
+    
+    setAddress(prev => ({ ...prev, [field]: filteredValue }));
+    validateAddressField(field, filteredValue);
+  };
+
   useEffect(() => {
     setLoading(true);
     Promise.all([fetchMenu(), fetchSettings()])
@@ -97,11 +149,11 @@ export default function CartPage() {
         console.error(err);
         setLoading(false);
       });
-    
+   
     // Initialize socket connection
     const sock = io('http://localhost:3001');
     setSocket(sock);
-    
+   
     // Listen for real-time updates
     sock.on('menuUpdated', () => {
       console.log('Menu updated - refreshing menu data and cleaning cart');
@@ -110,14 +162,14 @@ export default function CartPage() {
         showUpdateNotification('Menu has been updated!');
       });
     });
-    
+   
     sock.on('settingsUpdated', () => {
       console.log('Settings updated - refreshing settings data');
       fetchSettings().then(() => {
         showUpdateNotification('Store settings have been updated!');
       });
     });
-    
+   
     // Clean up socket connection
     return () => {
       if (sock) {
@@ -130,16 +182,16 @@ export default function CartPage() {
     setCart(newCart);
     localStorage.setItem('cart', JSON.stringify(newCart));
   };
-  
+ 
   const inc = id => saveCart({ ...cart, [id]: (cart[id]||0) + 1 });
-  
+ 
   const dec = id => {
     const next = Math.max((cart[id]||0) - 1, 0);
     const nc = { ...cart, [id]: next };
     if (next === 0) delete nc[id];
     saveCart(nc);
   };
-  
+ 
   const removeItem = id => {
     const nc = { ...cart };
     delete nc[id];
@@ -176,14 +228,31 @@ export default function CartPage() {
     }
 
     if (serviceType==='Delivery') {
-      for (let f of ['flat','area','landmark','city','pincode','mobile']) {
-        if (!address[f].trim()) {
-          alert(`Please fill in ${f}`);
-          return;
+      // Validate all address fields
+      const requiredFields = ['flat', 'area', 'landmark', 'city', 'pincode', 'mobile'];
+      let hasErrors = false;
+      
+      for (let field of requiredFields) {
+        if (!address[field].trim()) {
+          validateAddressField(field, address[field]);
+          hasErrors = true;
         }
       }
+      
+      // Check for specific validation errors
+      if (address.mobile && !/^\d{10}$/.test(address.mobile)) {
+        hasErrors = true;
+      }
+      if (address.pincode && !/^\d{6}$/.test(address.pincode)) {
+        hasErrors = true;
+      }
+      
+      if (hasErrors || Object.keys(addressErrors).length > 0) {
+        alert('Please fix all address field errors before placing the order.');
+        return;
+      }
     }
-    
+   
     if (!canCheckout) {
       alert(settings.note||'Service unavailable');
       return;
@@ -238,7 +307,7 @@ export default function CartPage() {
               <h2 className="mb-0">
                 <FaShoppingCart className="me-2" /> Your Cart
               </h2>
-              <button 
+              <button
                 className="btn btn-outline-primary"
                 onClick={() => navigate('/shop')}
               >
@@ -398,58 +467,97 @@ export default function CartPage() {
                         <div className="col-md-6">
                           <label className="form-label">Flat / House no. / Bldg</label>
                           <input
-                            className="form-control"
+                            className={`form-control ${addressErrors.flat ? 'is-invalid' : address.flat.trim() ? 'is-valid' : ''}`}
                             required
                             value={address.flat}
-                            onChange={e=>setAddress(a=>({...a,flat:e.target.value}))}
+                            onChange={e => handleAddressChange('flat', e.target.value)}
+                            placeholder="Enter flat/house number"
                           />
+                          {addressErrors.flat && (
+                            <div className="invalid-feedback">{addressErrors.flat}</div>
+                          )}
                         </div>
                         <div className="col-md-6">
                           <label className="form-label">Area / Street / Sector / Village</label>
                           <input
-                            className="form-control"
+                            className={`form-control ${addressErrors.area ? 'is-invalid' : address.area.trim() ? 'is-valid' : ''}`}
                             required
                             value={address.area}
-                            onChange={e=>setAddress(a=>({...a,area:e.target.value}))}
+                            onChange={e => handleAddressChange('area', e.target.value)}
+                            placeholder="Enter area/street name"
                           />
+                          {addressErrors.area && (
+                            <div className="invalid-feedback">{addressErrors.area}</div>
+                          )}
                         </div>
                         <div className="col-md-6">
                           <label className="form-label">Landmark</label>
                           <input
-                            className="form-control"
+                            className={`form-control ${addressErrors.landmark ? 'is-invalid' : address.landmark.trim() ? 'is-valid' : ''}`}
                             required
                             value={address.landmark}
-                            onChange={e=>setAddress(a=>({...a,landmark:e.target.value}))}
+                            onChange={e => handleAddressChange('landmark', e.target.value)}
+                            placeholder="Enter nearby landmark"
                           />
+                          {addressErrors.landmark && (
+                            <div className="invalid-feedback">{addressErrors.landmark}</div>
+                          )}
                         </div>
                         <div className="col-md-6">
                           <label className="form-label">Town / City</label>
                           <input
-                            className="form-control"
+                            className={`form-control ${addressErrors.city ? 'is-invalid' : address.city.trim() ? 'is-valid' : ''}`}
                             required
                             value={address.city}
-                            onChange={e=>setAddress(a=>({...a,city:e.target.value}))}
+                            onChange={e => handleAddressChange('city', e.target.value)}
+                            placeholder="Enter city name"
                           />
+                          {addressErrors.city && (
+                            <div className="invalid-feedback">{addressErrors.city}</div>
+                          )}
                         </div>
                         <div className="col-md-6">
                           <label className="form-label">Pincode</label>
                           <input
                             type="text"
-                            className="form-control"
+                            className={`form-control ${addressErrors.pincode ? 'is-invalid' : address.pincode.length === 6 ? 'is-valid' : ''}`}
                             required
                             value={address.pincode}
-                            onChange={e=>setAddress(a=>({...a,pincode:e.target.value}))}
+                            onChange={e => handleAddressChange('pincode', e.target.value)}
+                            placeholder="6-digit pincode"
+                            maxLength={6}
                           />
+                          {addressErrors.pincode && (
+                            <div className="invalid-feedback">{addressErrors.pincode}</div>
+                          )}
+                          {address.pincode.length > 0 && address.pincode.length < 6 && (
+                            <small className="text-warning">
+                              Enter {6 - address.pincode.length} more digit{6 - address.pincode.length !== 1 ? 's' : ''}
+                            </small>
+                          )}
                         </div>
                         <div className="col-md-6">
                           <label className="form-label">Mobile number</label>
                           <input
                             type="tel"
-                            className="form-control"
+                            className={`form-control ${addressErrors.mobile ? 'is-invalid' : address.mobile.length === 10 ? 'is-valid' : ''}`}
                             required
                             value={address.mobile}
-                            onChange={e=>setAddress(a=>({...a,mobile:e.target.value}))}
+                            onChange={e => handleAddressChange('mobile', e.target.value)}
+                            placeholder="10-digit mobile number"
+                            maxLength={10}
                           />
+                          {addressErrors.mobile && (
+                            <div className="invalid-feedback">{addressErrors.mobile}</div>
+                          )}
+                          {address.mobile.length > 0 && address.mobile.length < 10 && (
+                            <small className="text-warning">
+                              Enter {10 - address.mobile.length} more digit{10 - address.mobile.length !== 1 ? 's' : ''}
+                            </small>
+                          )}
+                          {address.mobile.length === 10 && (
+                            <small className="text-success">✓ Valid mobile number</small>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -460,7 +568,7 @@ export default function CartPage() {
                   <button
                     className="btn btn-primary btn-lg"
                     onClick={submitOrder}
-                    disabled={!items.length || !canCheckout || submitting}
+                    disabled={!items.length || !canCheckout || submitting || (serviceType === 'Delivery' && Object.keys(addressErrors).length > 0)}
                   >
                     {submitting ? (
                       <>
