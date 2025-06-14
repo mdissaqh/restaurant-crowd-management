@@ -16,14 +16,16 @@ import {
   FaSave,
   FaShoppingCart,
   FaSearch,
-  FaTimes
+  FaTimes,
+  FaEdit,
+  FaCheck
 } from 'react-icons/fa';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('earnings');
   const [menu, setMenu] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [earningStats, setEarningStats] = useState({ 
+  const [earningStats, setEarningStats] = useState({
     today: 0, week: 0, month: 0, year: 0,
     todayOrders: 0, weekOrders: 0, monthOrders: 0, yearOrders: 0
   });
@@ -47,10 +49,14 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [savingSuccess, setSavingSuccess] = useState(false);
   const [socket, setSocket] = useState(null);
-  
+ 
   // Search functionality state
   const [activeOrdersSearch, setActiveOrdersSearch] = useState('');
   const [completedOrdersSearch, setCompletedOrdersSearch] = useState('');
+
+  // NEW: Price editing state
+  const [editingPrices, setEditingPrices] = useState({});
+  const [editPriceValues, setEditPriceValues] = useState({});
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -71,7 +77,7 @@ export default function AdminDashboard() {
    
     const sock = io('http://localhost:3001');
     setSocket(sock);
-    
+   
     sock.on('newOrder', fetchOrders);
     sock.on('orderUpdated', fetchOrders);
     sock.on('settingsUpdated', (updatedSettings) => {
@@ -81,7 +87,7 @@ export default function AdminDashboard() {
         ...updatedSettings
       }));
     });
-    
+   
     return () => {
       sock.disconnect();
     };
@@ -140,7 +146,7 @@ export default function AdminDashboard() {
   function calcEarningsStats(list) {
     const completed = list.filter(o => ['Completed', 'Delivered'].includes(o.status));
     const now = new Date();
-    
+   
     // Today calculation - current day from 00:00:00 to 23:59:59
     const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
@@ -150,24 +156,24 @@ export default function AdminDashboard() {
     });
     const todaySum = todayCompleted.reduce((s, o) => s + o.total, 0);
     const todayOrderCount = todayCompleted.length;
-    
+   
     // Week calculation (Sunday to Saturday) - Fixed for proper Sunday-Saturday week
     const currentDay = now.getDay(); // 0 = Sunday, 6 = Saturday
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - currentDay); // Go back to Sunday
     weekStart.setHours(0, 0, 0, 0);
-    
+   
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6); // Add 6 days to get Saturday
     weekEnd.setHours(23, 59, 59, 999);
-    
+   
     const weekCompleted = completed.filter(o => {
       const d = new Date(o.completedAt);
       return d >= weekStart && d <= weekEnd;
     });
     const weekSum = weekCompleted.reduce((s, o) => s + o.total, 0);
     const weekOrderCount = weekCompleted.length;
-    
+   
     // Current Month calculation - from 1st day to last day of current month
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -177,7 +183,7 @@ export default function AdminDashboard() {
     });
     const monthSum = monthCompleted.reduce((s, o) => s + o.total, 0);
     const monthOrderCount = monthCompleted.length;
-    
+   
     // Current Year calculation - from Jan 1st to Dec 31st of current year
     const yearStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
     const yearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
@@ -188,10 +194,10 @@ export default function AdminDashboard() {
     const yearSum = yearCompleted.reduce((s, o) => s + o.total, 0);
     const yearOrderCount = yearCompleted.length;
 
-    setEarningStats({ 
-      today: todaySum, 
-      week: weekSum, 
-      month: monthSum, 
+    setEarningStats({
+      today: todaySum,
+      week: weekSum,
+      month: monthSum,
       year: yearSum,
       todayOrders: todayOrderCount,
       weekOrders: weekOrderCount,
@@ -222,21 +228,21 @@ export default function AdminDashboard() {
   // Fixed feedback statistics calculation with corrected "Last 7 Days" logic
   function calcFeedbackStats(list) {
     const now = new Date();
-    
+   
     // Fixed: Last 7 Days - proper rolling 7-day window
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
+   
     // Current Month calculation for ratings
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    
+   
     // Current Year calculation for ratings
     const yearStart = new Date(now.getFullYear(), 0, 1);
     const yearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
 
     // Filter orders that have ratings
     const rated = list.filter(o => o.rating != null && o.completedAt);
-    
+   
     // Helper function to calculate average rating
     const avg = arr => arr.length
       ? arr.reduce((s, o) => s + o.rating, 0) / arr.length
@@ -302,6 +308,49 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   }
 
+  // NEW: Price editing functions
+  function startEditPrice(itemId, currentPrice) {
+    setEditingPrices(prev => ({ ...prev, [itemId]: true }));
+    setEditPriceValues(prev => ({ ...prev, [itemId]: currentPrice.toString() }));
+  }
+
+  function cancelEditPrice(itemId) {
+    setEditingPrices(prev => {
+      const newState = { ...prev };
+      delete newState[itemId];
+      return newState;
+    });
+    setEditPriceValues(prev => {
+      const newState = { ...prev };
+      delete newState[itemId];
+      return newState;
+    });
+  }
+
+  function savePrice(itemId) {
+    const newPrice = parseFloat(editPriceValues[itemId]);
+    
+    if (isNaN(newPrice) || newPrice <= 0) {
+      alert('Please enter a valid price greater than 0');
+      return;
+    }
+
+    setLoading(true);
+    axios.put(`http://localhost:3001/api/menu/${itemId}`, { price: newPrice })
+      .then(() => {
+        fetchMenu();
+        cancelEditPrice(itemId);
+        if (socket) {
+          socket.emit('menuUpdated');
+        }
+      })
+      .catch(error => {
+        console.error('Error updating price:', error);
+        alert('Failed to update price. Please try again.');
+      })
+      .finally(() => setLoading(false));
+  }
+
   function updateStatus(o) {
     const flow = o.serviceType !== 'Delivery'
       ? ['Pending', 'In Progress', 'Ready', 'Completed']
@@ -339,17 +388,17 @@ export default function AdminDashboard() {
   // Updated function to immediately save settings when toggles are changed
   function updateSettingImmediate(key, value) {
     console.log(`Updating setting ${key} to ${value}`);
-    
+   
     // Update local state immediately for responsive UI
     const updatedSettings = { ...settings, [key]: value };
     setSettings(updatedSettings);
-    
+   
     // Save to server immediately
     axios.post('http://localhost:3001/api/settings', updatedSettings)
       .then(r => {
         console.log('Settings saved successfully:', r.data);
         setSettings(r.data);
-        
+       
         // Notify clients via socket
         if (socket) {
           socket.emit('settingsUpdated');
@@ -423,7 +472,7 @@ export default function AdminDashboard() {
   // Helper functions for search functionality
   const filterOrdersBySearch = (ordersList, searchTerm) => {
     if (!searchTerm.trim()) return ordersList;
-    return ordersList.filter(order => 
+    return ordersList.filter(order =>
       order._id.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
@@ -672,11 +721,11 @@ export default function AdminDashboard() {
               {(() => {
                 const activeOrders = orders.filter(o => !['Completed','Delivered','Cancelled'].includes(o.status));
                 const filteredActiveOrders = filterOrdersBySearch(activeOrders, activeOrdersSearch);
-                
+               
                 if (!activeOrders.length) {
                   return <div className="alert alert-info">No active orders at the moment.</div>;
                 }
-                
+               
                 if (activeOrdersSearch && !filteredActiveOrders.length) {
                   return (
                     <div className="alert alert-warning">
@@ -816,11 +865,11 @@ export default function AdminDashboard() {
               {(() => {
                 const completedOrders = orders.filter(o => ['Completed','Delivered','Cancelled'].includes(o.status));
                 const filteredCompletedOrders = filterOrdersBySearch(completedOrders, completedOrdersSearch);
-                
+               
                 if (!completedOrders.length) {
                   return <div className="alert alert-info">No completed or cancelled orders yet.</div>;
                 }
-                
+               
                 if (completedOrdersSearch && !filteredCompletedOrders.length) {
                   return (
                     <div className="alert alert-warning">
@@ -940,7 +989,7 @@ export default function AdminDashboard() {
             </section>
           )}
 
-          {/* Enhanced Menu Management with Natural Image Display */}
+          {/* Enhanced Menu Management with Price Editing */}
           {activeTab === 'menu' && (
             <section className="settings-container">
               <h3 className="mb-4"><FaUtensils className="me-2" />Menu Management</h3>
@@ -997,10 +1046,10 @@ export default function AdminDashboard() {
                     <div className="row">
                       {menu.filter(i=>i.category===cat).map(item => (
                         <div key={item._id} className="col-md-3 mb-3">
-                          <div className="card h-100" style={{ minHeight: '350px' }}>
+                          <div className="card h-100" style={{ minHeight: '400px' }}>
                             {item.image && (
-                              <div className="position-relative" style={{ 
-                                minHeight: '200px', 
+                              <div className="position-relative" style={{
+                                minHeight: '200px',
                                 maxHeight: '250px',
                                 overflow: 'hidden',
                                 display: 'flex',
@@ -1023,10 +1072,56 @@ export default function AdminDashboard() {
                             )}
                             <div className="card-body d-flex flex-column">
                               <h5 className="card-title">{item.name}</h5>
-                              <p className="card-text text-primary fw-bold">₹{item.price.toFixed(2)}</p>
+                              
+                              {/* Price editing section */}
+                              <div className="mb-3">
+                                {editingPrices[item._id] ? (
+                                  <div className="d-flex align-items-center gap-2">
+                                    <span className="text-muted">₹</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      className="form-control form-control-sm"
+                                      value={editPriceValues[item._id] || ''}
+                                      onChange={e => setEditPriceValues(prev => ({
+                                        ...prev,
+                                        [item._id]: e.target.value
+                                      }))}
+                                      style={{ width: '80px' }}
+                                    />
+                                    <button
+                                      className="btn btn-success btn-sm"
+                                      onClick={() => savePrice(item._id)}
+                                      disabled={loading}
+                                    >
+                                      <FaCheck />
+                                    </button>
+                                    <button
+                                      className="btn btn-secondary btn-sm"
+                                      onClick={() => cancelEditPrice(item._id)}
+                                    >
+                                      <FaTimes />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="d-flex align-items-center justify-content-between">
+                                    <span className="text-primary fw-bold">₹{item.price.toFixed(2)}</span>
+                                    <button
+                                      className="btn btn-outline-primary btn-sm"
+                                      onClick={() => startEditPrice(item._id, item.price)}
+                                      disabled={loading}
+                                    >
+                                      <FaEdit />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
                               <button
                                 className="btn btn-danger mt-auto"
                                 onClick={() => delMenu(item._id)}
+                                disabled={loading}
                               >
                                 Remove Item
                               </button>
