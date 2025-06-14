@@ -41,25 +41,43 @@ app.get('/api/menu', async (_,res) => {
 });
 
 app.post('/api/menu', upload.single('image'), async (req,res) => {
-  const { name, price, category } = req.body;
+  const { name, price, category, isAvailable } = req.body;
   const image = req.file?`/uploads/${req.file.filename}`:'';
-  const doc = await new MenuItem({ name, price:+price, image, category }).save();
+  const doc = await new MenuItem({
+    name,
+    price:+price,
+    image,
+    category,
+    isAvailable: isAvailable === 'true' || isAvailable === true
+  }).save();
   io.emit('menuUpdated'); // Send update to all clients
   res.status(201).json(doc);
 });
 
-// NEW: Price update endpoint
+// Price and availability update endpoint
 app.put('/api/menu/:id', async (req,res) => {
   try {
-    const { price } = req.body;
+    const { price, isAvailable } = req.body;
+    const updateData = {};
+   
+    if (price !== undefined) {
+      updateData.price = +price;
+    }
+   
+    if (isAvailable !== undefined) {
+      updateData.isAvailable = isAvailable;
+    }
+   
     const updatedItem = await MenuItem.findByIdAndUpdate(
-      req.params.id, 
-      { price: +price }, 
+      req.params.id,
+      updateData,
       { new: true }
     );
+   
     if (!updatedItem) {
       return res.status(404).json({ error: 'Menu item not found' });
     }
+   
     io.emit('menuUpdated'); // Send update to all clients
     res.json(updatedItem);
   } catch (e) {
@@ -81,9 +99,9 @@ app.delete('/api/menu/:id', async (req,res) => {
 app.post('/api/order', async (req,res) => {
   const { name,mobile,email,serviceType,address,items,lat,lng,formattedAddress } = req.body;
 
-  // enforce structured address if Delivery
+  // UPDATED: enforce structured address if Delivery (REMOVED MOBILE VALIDATION)
   if (serviceType === 'Delivery') {
-    const fields = ['flat','area','landmark','city','pincode','mobile'];
+    const fields = ['flat','area','landmark','city','pincode']; // Mobile removed from validation
     for (let f of fields) {
       if (!address[f] || address[f].toString().trim() === '') {
         return res.status(400).json({ error: `Missing delivery address field: ${f}` });
@@ -98,8 +116,12 @@ app.post('/api/order', async (req,res) => {
 
   const detailed = await Promise.all(items.map(async ({id,qty})=>{
     const m = await MenuItem.findById(id);
+    if (!m || !m.isAvailable) {
+      throw new Error(`Item ${m?.name || 'Unknown'} is not available`);
+    }
     return { id, name:m.name, price:m.price, qty };
   }));
+ 
   const baseTotal = detailed.reduce((s,i)=>s + i.price*i.qty, 0);
 
   // calculate taxes & delivery fee
@@ -143,7 +165,7 @@ app.post('/api/order/update', async (req,res) => {
   const { id, status, estimatedTime, cancellationNote } = req.body;
   const o = await Order.findById(id);
   if (!o) return res.status(404).json({ error: 'Order not found' });
-
+ 
   if (estimatedTime != null) o.estimatedTime = +estimatedTime;
   if (status) {
     o.status = status;
@@ -190,12 +212,12 @@ app.post('/api/settings', async (req,res) => {
 // Socket connection handling
 io.on('connection', sock => {
   console.log('Socket connected:', sock.id);
-  
+ 
   // Listen for client-triggered events
   sock.on('menuUpdated', () => {
     io.emit('menuUpdated');
   });
-  
+ 
   sock.on('settingsUpdated', () => {
     io.emit('settingsUpdated');
   });

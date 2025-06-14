@@ -16,6 +16,10 @@ const menuItemSchema = new mongoose.Schema({
   category: { 
     type: String, 
     required: true 
+  },
+  isAvailable: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true
