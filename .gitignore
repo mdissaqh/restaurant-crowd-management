@@ -1,41 +1,9 @@
-# Node modules (backend & frontend)
-node_modules/
-**/node_modules/
+# Node modules
+/node_modules
 
-# Environment files
+# Uploaded images
+/uploads
+
+# Env files
 .env
-.env.local
-.env.*.local
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE / Editor
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-
-# Build outputs
-dist/
-build/
-frontend/build/
-
-# Uploaded media
-uploads/
-
-# Coverage reports
-coverage/
-*.lcov
-
-# Misc
-*.log
-.cache/
-.tmp/
+backend/.env
